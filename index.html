@@ -1369,25 +1369,50 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
   }
 
   /* ---------- interaction ---------- */
-  let dragging = false, px = 0, py = 0, rotY = 0.5, rotX = 0.33, dist = 1;
+  let dragging = false, rotY = 0.5, rotX = 0.33, dist = 1;
+  // active pointers: one finger (or mouse) rotates, two fingers pinch-zoom
+  const pointers = new Map();          // pointerId -> {x, y}
+  let pinchSpread = 0, pinchZoom = 1;  // finger gap + zoom captured at pinch start
   function applyRot() {
     pivot.rotation.set(0, rotY, 0);
     const span = Math.max(frameH * 1.25, frameD * 1.5) * dist;
     camera.position.set(0, Math.sin(rotX) * span * 1.3, Math.cos(rotX) * span * 1.55);
     camera.lookAt(0, 0, 0);
   }
-  canvas.addEventListener('pointerdown', e => { dragging = true; px = e.clientX; py = e.clientY; canvas.setPointerCapture(e.pointerId); });
+  const setZoom = z => { dist = Math.max(0.5, Math.min(2.5, z)); };
+  const spread = () => {
+    const [a, b] = [...pointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  canvas.addEventListener('pointerdown', e => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    dragging = true;
+    if (pointers.size === 2) { pinchSpread = spread(); pinchZoom = dist; }
+  });
   canvas.addEventListener('pointermove', e => {
-    if (!dragging) return;
-    rotY += (e.clientX - px) * 0.008;
-    rotX = Math.max(-0.15, Math.min(1.3, rotX + (e.clientY - py) * 0.006));
-    px = e.clientX; py = e.clientY;
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size >= 2) {                     // two fingers → pinch-zoom
+      if (pinchSpread > 0) { setZoom(pinchZoom * pinchSpread / spread()); applyRot(); }
+      return;
+    }
+    rotY += dx * 0.008;                           // one finger / mouse → rotate
+    rotX = Math.max(-0.15, Math.min(1.3, rotX + dy * 0.006));
     applyRot();
   });
-  canvas.addEventListener('pointerup', () => dragging = false);
-  canvas.addEventListener('wheel', e => {
+  const endPointer = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchSpread = 0;       // a lone remaining finger resumes rotating cleanly
+    if (pointers.size === 0) dragging = false;
+  };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('wheel', e => {         // desktop scroll-to-zoom
     e.preventDefault();
-    dist = Math.max(0.5, Math.min(2.5, dist * (1 + e.deltaY * 0.001)));
+    setZoom(dist * (1 + e.deltaY * 0.001));
     applyRot();
   }, { passive: false });
 
