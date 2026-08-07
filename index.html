@@ -37,6 +37,29 @@
   }
   .wordmark::after { content: "·"; color: var(--sage); margin-left: 6px; }
   header .tagline { font-size: 12.5px; color: var(--ink-soft); letter-spacing: .02em; }
+  #aboutLink {
+    margin-left: auto; font-size: 12.5px; color: var(--sage-deep); cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  #aboutModal {
+    position: fixed; inset: 0; background: rgba(46,51,43,.35); z-index: 40;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #aboutModal.open { display: flex; }
+  .about-card {
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 20px;
+    max-width: 440px; padding: 28px 28px 22px; font-size: 13.5px; line-height: 1.65;
+  }
+  .about-card p { margin-bottom: 13px; color: var(--ink); }
+  .about-card .w { color: var(--water-deep); }
+  .about-card .fine { color: var(--ink-soft); font-size: 12.5px; }
+  .about-card a { color: var(--sage-deep); }
+  .about-card button {
+    background: var(--sage); color: #FCFDF9; border: 0; border-radius: 10px;
+    font-family: var(--body); font-weight: 600; font-size: 13px; padding: 9px 20px;
+    cursor: pointer; margin-top: 4px;
+  }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 18px 26px 14px; flex-wrap: wrap; }
   main { flex: 1; display: flex; min-height: 0; }
 
   /* ---------- stage (left) ---------- */
@@ -202,6 +225,7 @@
 <header>
   <div class="wordmark">wellpot</div>
   <span class="tagline">self-watering planters you print</span>
+  <span id="aboutLink">about</span>
 </header>
 <main>
   <div id="stage">
@@ -234,6 +258,15 @@
   </div>
   <div id="controls"></div>
 </main>
+<div id="aboutModal">
+  <div class="about-card">
+    <div class="wordmark" style="margin-bottom:14px">wellpot</div>
+    <p>A free generator for self-watering planters. Every pot is two printed parts: an outer pot with a <b class="w">water well</b> below, and an inner pot that sits on a ledge above it. Fill the well through the built-in spout and the soil drinks from beneath for days at a time.</p>
+    <p>Pick a plant to start from a good fit, adjust anything, and download. Print in PETG, no supports — the watertight structure is built into the model, and the one slicer setting that matters (infill direction 30&deg;) is included in the 3MF.</p>
+    <p class="fine">Free to print and share. If a pot turns out well, <a href="https://ko-fi.com/wellpot" target="_blank" rel="noopener">tips keep this growing</a>.</p>
+    <button id="aboutClose">Close</button>
+  </div>
+</div>
 <script>
 /* Ribbed self-watering pot — procedural mesh core.
    Generates watertight triangle meshes for outer + inner pot directly
@@ -1377,6 +1410,12 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
+
+  const aboutModal = document.getElementById('aboutModal');
+  document.getElementById('aboutLink').addEventListener('click', () => aboutModal.classList.add('open'));
+  document.getElementById('aboutClose').addEventListener('click', () => aboutModal.classList.remove('open'));
+  aboutModal.addEventListener('click', e => { if (e.target === aboutModal) aboutModal.classList.remove('open'); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') aboutModal.classList.remove('open'); });
 
   applyPlant(PLANTS.find(x => x.n === 'Medium'));
   resize();
