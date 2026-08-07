@@ -64,6 +64,9 @@
 
   /* ---------- stage (left) ---------- */
   #stage { flex: 1; position: relative; min-width: 0; }
+  /* wraps the visual layers so they can be a fixed-height flow block on mobile;
+     fills the stage exactly on desktop (transparent, no layout change) */
+  #viewer { position: absolute; inset: 0; }
   #backdrop {
     position: absolute; inset: 14px 8px 14px 22px; border-radius: 20px;
     background: radial-gradient(120% 90% at 50% 18%, #FDFDFA 0%, #F2F3EB 48%, #E4E7DB 100%);
@@ -210,14 +213,37 @@
   #thanks a { color: var(--sage-deep); text-decoration: underline; text-underline-offset: 2px; }
   .hidden { display: none !important; }
   @media (max-width: 760px) {
-    main { flex-direction: column; }
-    #stage { min-height: 44%; }
-    #controls { width: 100%; flex: 1; padding: 6px 16px 30px; }
+    /* whole page scrolls; the pot viewer is a fixed-height block up top,
+       and stats + downloads drop into normal flow beneath it */
+    html, body { height: auto; }
+    body { overflow: visible; overflow-x: hidden; }
+    main { flex-direction: column; min-height: 0; }
+
+    #stage { flex: none; display: flex; flex-direction: column; }
+    /* the viewer becomes an in-flow, fixed-height region the canvas fills */
+    #viewer { position: relative; flex: none; height: 46vh; min-height: 300px; }
     #backdrop { inset: 8px 14px; }
     #viewport { top: 8px; left: 14px; width: calc(100% - 28px); height: calc(100% - 16px); }
-    #hud { top: 18px; left: 26px; }
-    #stats { left: 26px; bottom: 18px; font-size: 11.5px; }
-    #downloads { right: 16px; bottom: 14px; width: 210px; }
+    #hud { top: 16px; left: 26px; }
+    #warn { top: 16px; right: 22px; }
+    #thanks { bottom: 16px; }
+
+    /* out of the overlay, into the flow — no longer covering the pot */
+    #stats {
+      position: static; align-self: flex-start; pointer-events: auto;
+      margin: 12px 16px 0; font-size: 12px; border-radius: 12px;
+    }
+    #downloads {
+      position: static; width: auto; align-self: stretch;
+      margin: 12px 16px 4px;
+    }
+
+    /* controls flow under everything and scroll with the page */
+    #controls {
+      width: 100%; flex: none; overflow: visible;
+      padding: 4px 16px 30px;
+      mask-image: none; -webkit-mask-image: none;
+    }
   }
 </style>
 </head>
@@ -229,19 +255,21 @@
 </header>
 <main>
   <div id="stage">
-    <div id="backdrop"></div>
-    <canvas id="viewport"></canvas>
-    <div id="hud">
-      <div id="viewSeg">
-        <div class="seg on" data-view="together">together</div>
-        <div class="seg" data-view="inside">inside</div>
-        <div class="seg" data-view="outer">outer pot</div>
-        <div class="seg" data-view="inner">inner pot</div>
+    <div id="viewer">
+      <div id="backdrop"></div>
+      <canvas id="viewport"></canvas>
+      <div id="hud">
+        <div id="viewSeg">
+          <div class="seg on" data-view="together">together</div>
+          <div class="seg" data-view="inside">inside</div>
+          <div class="seg" data-view="outer">outer pot</div>
+          <div class="seg" data-view="inner">inner pot</div>
+        </div>
+        <div class="toggle" id="tgSpin">spin</div>
       </div>
-      <div class="toggle" id="tgSpin">spin</div>
+      <div id="warn"></div>
+      <div id="thanks">Sent to your downloads. Enjoy the pot &mdash; <a href="https://ko-fi.com/linfur" target="_blank" rel="noopener">tips welcome</a> &#9749;</div>
     </div>
-    <div id="warn"></div>
-    <div id="thanks">Sent to your downloads. Enjoy the pot &mdash; <a href="https://ko-fi.com/linfur" target="_blank" rel="noopener">tips welcome</a> &#9749;</div>
     <div id="stats"></div>
     <div id="downloads">
       <div class="tipwrap">
