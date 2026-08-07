@@ -182,8 +182,33 @@
   }
   .param input[type="number"]:hover { border-color: var(--card-line); }
   .param input[type="number"]:focus { outline: none; border-color: var(--sage); background: var(--card); }
-  .param input[type="range"] { width: 100%; accent-color: var(--sage); height: 18px; margin-top: 2px; }
-  .water-card .param input[type="range"] { accent-color: var(--water); }
+  /* custom sliders — flat borderless track (no stroke) with a filled
+     progress portion driven by --fill (set in JS) and a solid thumb */
+  .param input[type="range"] {
+    --sl: var(--sage); --fill: 0%;
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 22px; margin-top: 2px;
+    background: transparent; cursor: pointer;
+  }
+  .water-card .param input[type="range"] { --sl: var(--water); }
+  .param input[type="range"]::-webkit-slider-runnable-track {
+    height: 5px; border: 0; border-radius: 999px;
+    background: linear-gradient(var(--sl), var(--sl)) left / var(--fill) 100% no-repeat, #DBDECF;
+  }
+  .param input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 17px; height: 17px; margin-top: -6px; border: 0; border-radius: 50%;
+    background: var(--sl); box-shadow: 0 1px 3px rgba(46,51,43,.22);
+  }
+  .param input[type="range"]::-moz-range-track { height: 5px; border: 0; border-radius: 999px; background: #DBDECF; }
+  .param input[type="range"]::-moz-range-progress { height: 5px; border: 0; border-radius: 999px; background: var(--sl); }
+  .param input[type="range"]::-moz-range-thumb {
+    width: 17px; height: 17px; border: 0; border-radius: 50%;
+    background: var(--sl); box-shadow: 0 1px 3px rgba(46,51,43,.22);
+  }
+  .param input[type="range"]:focus { outline: none; }
+  .param input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(124,144,112,.35); }
+  .param input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px rgba(124,144,112,.35); }
   select {
     width: 100%; background: var(--card); border: 1px solid var(--card-line); color: var(--ink);
     font-family: var(--body); font-size: 13px; padding: 8px 10px; border-radius: 10px; margin-bottom: 11px;
@@ -993,16 +1018,19 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
       '<input type="number" step="' + step + '" value="' + params[key] + '"></div>' +
       '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + params[key] + '">';
     const [num, rng] = row.querySelectorAll('input');
+    const paintFill = () => rng.style.setProperty('--fill', (max > min ? (rng.value - min) / (max - min) * 100 : 0) + '%');
     const set = v => {
       const n = parseFloat(v);
       v = Math.max(min, Math.min(max, isNaN(n) ? params[key] : n));
       params[key] = v; num.value = v; rng.value = v;
+      paintFill();
       markPreset(null);
       scheduleBuild();
     };
     num.addEventListener('change', () => set(num.value));
     rng.addEventListener('input', () => set(rng.value));
-    inputs[key] = { num, rng };
+    inputs[key] = { num, rng, paintFill };
+    paintFill();
     return row;
   }
   function card(title, water) {
@@ -1209,7 +1237,7 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
 
   function syncAll() {
     for (const k in inputs) {
-      if (params[k] !== undefined) { inputs[k].num.value = params[k]; inputs[k].rng.value = params[k]; }
+      if (params[k] !== undefined) { inputs[k].num.value = params[k]; inputs[k].rng.value = params[k]; inputs[k].paintFill(); }
     }
     styleSel.value = params.RIB_DEPTH === 0 ? 'smooth' : (params.RIB_STYLE || 'sine');
     texRows.forEach(r => r.classList.toggle('hidden', params.RIB_DEPTH === 0));
