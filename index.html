@@ -228,17 +228,22 @@
     #warn { top: 16px; right: 22px; }
     #thanks { bottom: 16px; }
 
-    /* keep the wordmark and about link on one row; tagline wraps below,
-       so about no longer strands on a line of its own */
-    header { row-gap: 4px; }
-    header .tagline { order: 3; flex-basis: 100%; }
-    #aboutLink { order: 2; }
+    /* single compact header row — wordmark left, about right; the tagline
+       can't share the row and its own line just wastes height, so drop it */
+    header { padding: 14px 20px 10px; }
+    header .tagline { display: none; }
 
-    /* out of the overlay, into the flow — no longer covering the pot */
+    /* out of the overlay, into the flow — no longer covering the pot.
+       label-over-value stats in a 2-col grid: fills the width, half the height */
     #stats {
       position: static; align-self: stretch; pointer-events: auto;
-      margin: 12px 16px 0; font-size: 12px; border-radius: 12px;
+      margin: 12px 16px 0; padding: 13px 16px 14px; border-radius: 12px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      column-gap: 18px; row-gap: 10px; line-height: 1.3;
     }
+    #stats .stat { display: flex; flex-direction: column; gap: 1px; }
+    #stats .stat .k { font-size: 11px; color: var(--ink-soft); }
+    #stats .stat .v { font-size: 14px; }
     #downloads {
       position: static; width: auto; align-self: stretch;
       margin: 12px 16px 4px;
@@ -1343,11 +1348,12 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     const d = PC.derived(params);
     const rr = d.LOWER_R - (params.SOLID_RESERVOIR ? 3.6 : 0);
     const resVol = Math.max(0, Math.PI * rr * rr * (params.LEDGE_Z - params.FLOOR) / 1000);
+    const stat = (k, v) => '<div class="stat"><span class="k">' + k + '</span> <span class="v">' + v + '</span></div>';
     document.getElementById('stats').innerHTML =
-      'outer <b>&Oslash;' + params.OUTER_D + ' &times; ' + params.H + '</b> mm<br>' +
-      'inner <b>&Oslash;' + (2 * d.r_o).toFixed(0) + ' &times; ' + d.innerH.toFixed(0) + '</b> mm<br>' +
-      'the well holds <span class="water">&approx;' + Math.round(resVol) + ' ml</span><br>' +
-      refillText(resVol);
+      stat('outer', '<b>&Oslash;' + params.OUTER_D + ' &times; ' + params.H + '</b> mm') +
+      stat('inner', '<b>&Oslash;' + (2 * d.r_o).toFixed(0) + ' &times; ' + d.innerH.toFixed(0) + '</b> mm') +
+      stat('the well holds', '<span class="water">&approx;' + Math.round(resVol) + ' ml</span>') +
+      stat('refill', refillText(resVol));
   }
 
   function refillText(vol) {
@@ -1359,7 +1365,7 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     else if (days < 10) phrase = 'about once a week';
     else if (days < 18) phrase = 'every couple of weeks';
     else phrase = 'every few weeks';
-    return 'refill <b>' + phrase + '</b>';
+    return '<b>' + phrase + '</b>';
   }
 
   /* ---------- interaction ---------- */
