@@ -1112,13 +1112,23 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     currentCat = el.dataset.cat;
     plantCats.querySelectorAll('.seg').forEach(x => x.classList.toggle('on', x === el));
     renderPlantChips(currentPlant);
+    syncPlantNote();
   });
   let currentPlant = null, currentDraw = null;
+  const CUSTOM_NOTE = 'Custom size — pick a plant any time to start over from a good fit.';
+  // keep the note tied to what's highlighted: show the selected plant's note
+  // only while that plant lives in the category currently on screen
+  function syncPlantNote() {
+    const shown = currentPlant && PLANTS.find(x => x.c === currentCat && x.n === currentPlant);
+    plantNote.textContent = shown ? shown.note
+      : currentPlant ? 'Pick a plant to start from a good fit.'
+      : CUSTOM_NOTE;
+  }
   function markPreset(name) {
     currentPlant = name;
     if (!name) currentDraw = null;
     renderPlantChips(name);
-    if (!name) plantNote.textContent = 'Custom size — pick a plant any time to start over from a good fit.';
+    syncPlantNote();
   }
   function applyPlant(pl) {
     Object.assign(params, pl.p);
