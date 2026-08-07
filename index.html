@@ -228,9 +228,15 @@
     #warn { top: 16px; right: 22px; }
     #thanks { bottom: 16px; }
 
+    /* keep the wordmark and about link on one row; tagline wraps below,
+       so about no longer strands on a line of its own */
+    header { row-gap: 4px; }
+    header .tagline { order: 3; flex-basis: 100%; }
+    #aboutLink { order: 2; }
+
     /* out of the overlay, into the flow — no longer covering the pot */
     #stats {
-      position: static; align-self: flex-start; pointer-events: auto;
+      position: static; align-self: stretch; pointer-events: auto;
       margin: 12px 16px 0; font-size: 12px; border-radius: 12px;
     }
     #downloads {
