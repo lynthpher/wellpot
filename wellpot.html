@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wellpot — self-watering planters you print</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg: #ECEEE6;
+    --card: #FBFBF7;
+    --card-line: #E1E3D8;
+    --ink: #2E332B;
+    --ink-soft: #6B7263;
+    --sage: #7C9070;
+    --sage-deep: #5F7355;
+    --water: #6FA8B8;
+    --water-deep: #4E8494;
+    --clay: #CFC3AE;
+    --display: "Futura", "Avenir Next", "Century Gothic", "Trebuchet MS", system-ui, sans-serif;
+    --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--body);
+    display: flex; flex-direction: column; overflow: hidden;
+    font-size: 14px;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 18px 26px 14px; flex-wrap: wrap;
+  }
+  .wordmark {
+    font-family: var(--display); font-size: 17px; font-weight: 500;
+    letter-spacing: .14em; text-transform: lowercase; color: var(--ink);
+  }
+  .wordmark::after { content: "·"; color: var(--sage); margin-left: 6px; }
+  header .tagline { font-size: 12.5px; color: var(--ink-soft); letter-spacing: .02em; }
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ---------- stage (left) ---------- */
+  #stage { flex: 1; position: relative; min-width: 0; }
+  #backdrop {
+    position: absolute; inset: 14px 8px 14px 22px; border-radius: 20px;
+    background: radial-gradient(120% 90% at 50% 18%, #FDFDFA 0%, #F2F3EB 48%, #E4E7DB 100%);
+    box-shadow: inset 0 0 0 1px var(--card-line);
+  }
+  #viewport { position: absolute; top: 14px; left: 22px; width: calc(100% - 30px); height: calc(100% - 28px); touch-action: none; cursor: grab; }
+  #viewport:active { cursor: grabbing; }
+  #hud { position: absolute; top: 28px; left: 38px; display: flex; gap: 7px; flex-wrap: wrap; }
+  .toggle {
+    background: var(--card); border: 1px solid var(--card-line); color: var(--ink-soft);
+    font-size: 12px; padding: 6px 13px; border-radius: 999px;
+    cursor: pointer; user-select: none; transition: all .15s;
+  }
+  .toggle.on { color: var(--sage-deep); border-color: var(--sage); background: #F1F4EC; }
+  #viewSeg {
+    display: flex; background: var(--card); border: 1px solid var(--card-line);
+    border-radius: 999px; padding: 3px;
+  }
+  #viewSeg .seg {
+    font-size: 12px; padding: 5px 14px; border-radius: 999px; color: var(--ink-soft);
+    cursor: pointer; user-select: none;
+  }
+  #viewSeg .seg.on { background: #E9EEE3; color: var(--sage-deep); font-weight: 600; }
+  #stats {
+    position: absolute; left: 38px; bottom: 28px;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 14px;
+    padding: 12px 16px; font-size: 12.5px; line-height: 1.9;
+    color: var(--ink-soft); pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  #stats b { color: var(--ink); font-weight: 600; }
+  #stats .water { color: var(--water-deep); font-weight: 600; }
+  #downloads {
+    position: absolute; right: 24px; bottom: 28px; width: 232px;
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 16px;
+    padding: 13px 14px 11px;
+  }
+  #downloads button {
+    border: 0; border-radius: 11px; cursor: pointer; font-family: var(--body);
+    font-size: 13px; font-weight: 600; padding: 11px 16px; transition: filter .15s; width: 100%;
+  }
+  #downloads button:hover { filter: brightness(1.06); }
+  #dl3mf { background: var(--sage); color: #FCFDF9; }
+  .tipwrap { position: relative; margin-bottom: 9px; }
+  .tipwrap .tip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(3px);
+    width: 215px; background: var(--ink); color: #F4F4EF;
+    font-size: 11.5px; line-height: 1.55; padding: 9px 11px; border-radius: 10px;
+    opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
+  }
+  .tipwrap .tip::after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--ink);
+  }
+  .tipwrap:hover .tip, .tipwrap:focus-within .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #downloads .secondary { background: var(--bg); color: var(--ink); border: 1px solid var(--card-line); font-weight: 500; }
+  #downloads .caption { font-size: 11px; color: var(--ink-soft); text-align: center; margin: 6px 0 10px; }
+  #downloads .stl-row { display: flex; gap: 8px; }
+  #downloads .meta { font-size: 11px; color: var(--ink-soft); text-align: center; margin-top: 9px; line-height: 1.7; }
+  #warn {
+    position: absolute; top: 28px; right: 24px; max-width: 270px;
+    background: #FBF4E3; border: 1px solid #E8D9B4; color: #6E5B2E;
+    font-size: 12.5px; padding: 10px 13px; border-radius: 12px; display: none;
+  }
+
+  /* ---------- controls (right) ---------- */
+  #controls {
+    width: 330px; flex-shrink: 0; overflow-y: auto;
+    padding: 14px 22px 30px 8px;
+    mask-image: linear-gradient(to bottom, transparent 0, black 16px, black calc(100% - 14px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 16px, black calc(100% - 14px), transparent 100%);
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--card-line);
+    border-radius: 16px; padding: 15px 16px 13px; margin-bottom: 12px;
+  }
+  .card > h2 {
+    font-family: var(--display); font-size: 11.5px; font-weight: 600;
+    letter-spacing: .12em; text-transform: lowercase; color: var(--ink-soft);
+    margin-bottom: 11px;
+  }
+  .card.water-card > h2 { color: var(--water-deep); }
+  .seg-row { display: flex; background: #EDEFE6; border-radius: 12px; padding: 3px; margin-bottom: 11px; }
+  .seg-row .seg {
+    flex: 1; text-align: center; font-size: 12px; padding: 7px 4px;
+    border-radius: 10px; color: var(--ink-soft); cursor: pointer; user-select: none;
+  }
+  .seg-row .seg.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(46,51,43,.07); }
+  #plantChips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    font-size: 12.5px; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid var(--card-line); background: var(--card); color: var(--ink-soft);
+    cursor: pointer; user-select: none; transition: all .15s;
+  }
+  .chip.on { color: var(--sage-deep); border-color: var(--sage); background: #F1F4EC; font-weight: 600; }
+  #plantNote { font-size: 12px; color: var(--ink-soft); line-height: 1.55; margin-top: 10px; min-height: 16px; }
+  #modeTabs { display: flex; background: #EDEFE6; border-radius: 12px; padding: 3px; margin-bottom: 8px; }
+  #modeTabs .tab {
+    flex: 1; text-align: center; font-size: 12.5px; padding: 8px 4px;
+    border-radius: 10px; color: var(--ink-soft); cursor: pointer; user-select: none;
+  }
+  #modeTabs .tab.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(46,51,43,.07); }
+  #modeCaption { font-size: 12px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 12px; padding: 0 2px; }
+  #modeCaption a { color: var(--water-deep); text-decoration: underline; text-underline-offset: 2px; }
+  .param { margin-bottom: 11px; }
+  .param .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .param label { font-size: 13px; color: var(--ink); }
+  .param .unit { color: var(--ink-soft); font-size: 11.5px; }
+  .param input[type="number"] {
+    width: 60px; background: transparent; border: 1px solid transparent; border-radius: 8px;
+    color: var(--ink); font-family: var(--body); font-variant-numeric: tabular-nums;
+    font-size: 13px; font-weight: 600; padding: 2px 6px; text-align: right;
+  }
+  .param input[type="number"]:hover { border-color: var(--card-line); }
+  .param input[type="number"]:focus { outline: none; border-color: var(--sage); background: var(--card); }
+  .param input[type="range"] { width: 100%; accent-color: var(--sage); height: 18px; margin-top: 2px; }
+  .water-card .param input[type="range"] { accent-color: var(--water); }
+  select {
+    width: 100%; background: var(--card); border: 1px solid var(--card-line); color: var(--ink);
+    font-family: var(--body); font-size: 13px; padding: 8px 10px; border-radius: 10px; margin-bottom: 11px;
+  }
+  select:focus { outline: none; border-color: var(--sage); }
+  .check { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 8px; }
+  .check label { font-size: 13px; color: var(--ink); }
+  .check .hint { display: block; font-size: 11.5px; color: var(--ink-soft); margin-top: 1px; }
+  .check input { accent-color: var(--sage); width: 17px; height: 17px; flex-shrink: 0; }
+  details { margin-top: 2px; }
+  details summary {
+    font-size: 12.5px; color: var(--ink-soft); cursor: pointer; user-select: none;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  details summary::before { content: "＋"; font-size: 11px; color: var(--sage-deep); }
+  details[open] summary::before { content: "－"; }
+  details .inner { padding-top: 12px; }
+  .footnote { font-size: 11.5px; color: var(--ink-soft); text-align: center; padding: 6px 10px 0; line-height: 1.6; }
+  .footnote a { color: var(--sage-deep); text-decoration: underline; text-underline-offset: 2px; }
+  #thanks {
+    position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(6px);
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 999px;
+    padding: 9px 17px; font-size: 12.5px; color: var(--ink-soft);
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  }
+  #thanks.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  #thanks a { color: var(--sage-deep); text-decoration: underline; text-underline-offset: 2px; }
+  .hidden { display: none !important; }
+  @media (max-width: 760px) {
+    main { flex-direction: column; }
+    #stage { min-height: 44%; }
+    #controls { width: 100%; flex: 1; padding: 6px 16px 30px; }
+    #backdrop { inset: 8px 14px; }
+    #viewport { top: 8px; left: 14px; width: calc(100% - 28px); height: calc(100% - 16px); }
+    #hud { top: 18px; left: 26px; }
+    #stats { left: 26px; bottom: 18px; font-size: 11.5px; }
+    #downloads { right: 16px; bottom: 14px; width: 210px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">wellpot</div>
+  <span class="tagline">self-watering planters you print</span>
+</header>
+<main>
+  <div id="stage">
+    <div id="backdrop"></div>
+    <canvas id="viewport"></canvas>
+    <div id="hud">
+      <div id="viewSeg">
+        <div class="seg on" data-view="together">together</div>
+        <div class="seg" data-view="inside">inside</div>
+        <div class="seg" data-view="outer">outer pot</div>
+        <div class="seg" data-view="inner">inner pot</div>
+      </div>
+      <div class="toggle" id="tgSpin">spin</div>
+    </div>
+    <div id="warn"></div>
+    <div id="thanks">Sent to your downloads. Enjoy the pot &mdash; <a href="https://ko-fi.com/wellpot" target="_blank" rel="noopener">tips welcome</a> &#9749;</div>
+    <div id="stats"></div>
+    <div id="downloads">
+      <div class="tipwrap">
+        <button id="dl3mf">Print-ready file (.3mf)</button>
+        <div class="tip">For Bambu Studio. Adds one slicer setting &mdash; infill direction 30&deg;. With dry filament and a calibrated printer, that's all it needs.</div>
+      </div>
+      <div class="stl-row">
+        <button id="dlOuter" class="secondary">Outer .stl</button>
+        <button id="dlInner" class="secondary">Inner .stl</button>
+      </div>
+      <div class="meta">STLs: set infill direction to 30&deg; yourself</div>
+    </div>
+
+  </div>
+  <div id="controls"></div>
+</main>
+<script>
+/* Ribbed self-watering pot — procedural mesh core.
+   Generates watertight triangle meshes for outer + inner pot directly
+   (no CSG), suitable for STL export. Used by the browser app and testable
+   in node. All units mm. */
+
+function defaultParams() {
+  return {
+    OUTER_D: 120, H: 110, WALL: 2.4, FLOOR: 5, SOLID_RESERVOIR: true, LATTICE: true,
+    RIB_COUNT: 110, RIB_DEPTH: 1.2, BASE_BAND_H: 14, TOP_BAND_H: 6,
+    LEDGE_Z: 30, LEDGE_W: 4, RES_FILLET: 5,
+    CLEARANCE: 0.4, INNER_WALL: 2, INNER_FLOOR: 2.5, RIM_DROP: 2,
+    WICK_HOLE_D: 8, WICK_SPACING: 30,
+    FILL_PORT_D: 18, FILL_WALL: 2, FILL_BLEND: 3,
+    MODE: 'wick', RIB_STYLE: 'sine', FOOT_D: 36, FOOT_WALL: 2, FOOT_GAP: 3, FOOT_HOLE_D: 5, FOOT_HOLES: 6,
+    SEG_PER_RIB: 8,
+  };
+}
+
+function derived(p) {
+  const R_peak = p.OUTER_D / 2;
+  let depthEff = p.RIB_DEPTH;
+  if (p.RIB_STYLE === 'panel') {
+    const sag = R_peak * (1 - Math.cos(Math.PI / Math.max(3, p.RIB_COUNT)));
+    depthEff = Math.max(depthEff, sag); // flat facets cut deeper than the grooves
+  }
+  const R_valley = R_peak - depthEff;
+  const BORE_R = R_valley - p.WALL;
+  const LOWER_R = BORE_R - p.LEDGE_W;
+  return {
+    R_peak, R_valley,
+    R_mean: (R_peak + R_valley) / 2,
+    AMP: p.RIB_DEPTH / 2,
+    BORE_R, LOWER_R,
+    r_o: BORE_R - p.CLEARANCE,
+    innerH: p.H - p.LEDGE_Z - p.RIM_DROP,
+  };
+}
+
+/* ---------------- mesh helpers ---------------- */
+
+function Mesh() { return { tris: [] }; } // tris: flat array of 9 floats per tri
+
+function addTri(m, a, b, c) {
+  // skip degenerate
+  const ux = b[0]-a[0], uy = b[1]-a[1], uz = b[2]-a[2];
+  const vx = c[0]-a[0], vy = c[1]-a[1], vz = c[2]-a[2];
+  const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+  if (nx*nx + ny*ny + nz*nz < 1e-14) return;
+  m.tris.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]);
+}
+function addQuad(m, a, b, c, d) { addTri(m, a, b, c); addTri(m, a, c, d); }
+
+/* Quad strip between two rings of equal length (closed). flip reverses winding. */
+function stripRings(m, ringA, ringB, flip) {
+  const n = ringA.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    if (!flip) addQuad(m, ringA[i], ringA[j], ringB[j], ringB[i]);
+    else addQuad(m, ringA[i], ringB[i], ringB[j], ringA[j]);
+  }
+}
+
+/* Fan from center point to ring. */
+function fan(m, center, ring, flip) {
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    if (!flip) addTri(m, center, ring[i], ring[j]);
+    else addTri(m, center, ring[j], ring[i]);
+  }
+}
+
+/* 2:1 ring transition (outer has 2n points, inner has n). */
+function halveRing(m, outer, inner, flip) {
+  const n = inner.length;
+  for (let i = 0; i < n; i++) {
+    const a = outer[2*i], b = outer[2*i+1], c = outer[(2*i+2) % (2*n)];
+    const p = inner[i], q = inner[(i+1) % n];
+    if (!flip) { addTri(m, a, b, p); addTri(m, b, q, p); addTri(m, b, c, q); }
+    else       { addTri(m, a, p, b); addTri(m, b, p, q); addTri(m, b, q, c); }
+  }
+}
+
+/* Cap a ring with well-shaped triangles: shrink toward center through
+   successively halved rings, then a small final fan. Avoids the ~1000
+   sliver triangles a direct fan creates (slicer-hostile at the center). */
+function fanGraded(m, center, ring, flip) {
+  let cur = ring;
+  while (cur.length >= 64 && cur.length % 2 === 0) {
+    const next = [];
+    for (let i = 0; i < cur.length; i += 2) {
+      const p = cur[i];
+      next.push([
+        center[0] + (p[0] - center[0]) * 0.55,
+        center[1] + (p[1] - center[1]) * 0.55,
+        p[2],
+      ]);
+    }
+    halveRing(m, cur, next, flip);
+    cur = next;
+  }
+  fan(m, center, cur, flip);
+}
+
+/* ---------------- 2D triangulation (earcut, MIT (c) Mapbox) ------------ */
+!function(t,n){"object"==typeof exports&&"undefined"!=typeof module?n(exports):"function"==typeof define&&define.amd?define(["exports"],n):n((t="undefined"!=typeof globalThis?globalThis:t||self).earcut={})}(this,function(t){"use strict";const n=new Set;let e=!1;function r(t,n,e,r,x){let o=null;if(x===G(t,n,e,r)>0)for(let x=n;x<e;x+=r)o=C(x/r|0,t[x],t[x+1],o);else for(let x=e-r;x>=n;x-=r)o=C(x/r|0,t[x],t[x+1],o);return o&&O(o,o.next)&&(D(o),o=o.next),o}function x(t,r=t){const x=r===t;let o,i=t;do{o=!1,i===i.next||0!==n.size&&n.has(i)||!O(i,i.next)&&0!==_(i.prev,i,i.next)?(x||i!==r)&&(i=i.next,o=!x):((x||i===r)&&(r=i.prev),e=!0,D(i),i=i.prev,o=!0)}while(o||i!==r);return r}function o(t,n,r,o,c){c&&function(t,n,e,r){let x=t,o=0;do{x.z=j(x.x,x.y,n,e,r),Z[o++]=x,x=x.next}while(x!==t);!function(t){if(t<=32){for(let n=1;n<t;n++){const t=Z[n],e=t.z;let r=n-1;for(;r>=0&&Z[r].z>e;)Z[r+1]=Z[r],r--;Z[r+1]=t}return}b.length<t&&(b=new Uint32Array(t),z=new Uint32Array(t),A=new Array(t));for(let n=0;n<t;n++)b[n]=Z[n].z;I(t,Z,b,A,z,0),I(t,A,z,Z,b,8),I(t,Z,b,A,z,16),I(t,A,z,Z,b,24)}(o);let i=null;for(let t=0;t<o;t++){const n=Z[t];n.prevZ=i,i&&(i.nextZ=n),i=n}i.nextZ=null}(t,r,o,c);let y=t,s=!1;for(;t.prev!==t.next;){const a=t.prev,h=t.next;if(_(a,t,h)<0&&(c?l(t,r,o,c):i(t)))n.push(a.i,t.i,h.i),D(t),t=h,y=h;else if((t=h)===y){if(e=!1,t=x(t),e){y=t;continue}if(!s){y=t=f(t,n),s=!0;continue}u(t,n,r,o,c);break}}}function i(t){const n=t.prev,e=t,r=t.next,x=n.x,o=e.x,i=r.x,l=n.y,f=e.y,u=r.y,c=Math.min(x,o,i),y=Math.min(l,f,u),s=Math.max(x,o,i),a=Math.max(l,f,u);let h=r.next;for(;h!==n;){if(h.x>=c&&h.x<=s&&h.y>=y&&h.y<=a&&(x!==h.x||l!==h.y)&&F(x,l,o,f,i,u,h.x,h.y)&&_(h.prev,h,h.next)>=0)return!1;h=h.next}return!0}function l(t,n,e,r){const x=t.prev,o=t,i=t.next,l=x.x,f=o.x,u=i.x,c=x.y,y=o.y,s=i.y,a=Math.min(l,f,u),h=Math.min(c,y,s),p=Math.max(l,f,u),v=Math.max(c,y,s),d=j(a,h,n,e,r),M=j(p,v,n,e,r);let w=t.prevZ;for(;w&&w.z>=d;){if(w.x>=a&&w.x<=p&&w.y>=h&&w.y<=v&&w!==i&&(l!==w.x||c!==w.y)&&F(l,c,f,y,u,s,w.x,w.y)&&_(w.prev,w,w.next)>=0)return!1;w=w.prevZ}let g=t.nextZ;for(;g&&g.z<=M;){if(g.x>=a&&g.x<=p&&g.y>=h&&g.y<=v&&g!==i&&(l!==g.x||c!==g.y)&&F(l,c,f,y,u,s,g.x,g.y)&&_(g.prev,g,g.next)>=0)return!1;g=g.nextZ}return!0}function f(t,n){let e=t,r=!1;do{const x=e.prev,o=e.next.next;P(x,e,e.next,o,!1)&&q(x,o)&&q(o,x)&&(n.push(x.i,e.i,o.i),D(e),D(e.next),e=t=o,r=!0),e=e.next}while(e!==t);return r?x(e):e}function u(t,n,e,r,i){let l=t;do{let t=l.next.next;for(;t!==l.prev;){if(l.i!==t.i&&T(l,t)){let f=B(l,t);return l=x(l,l.next),f=x(f,f.next),o(l,n,e,r,i),void o(f,n,e,r,i)}t=t.next}l=l.next}while(l!==t)}let c=!1;function y(t,n){return t.x-n.x||t.y-n.y||(t.next.y-t.y)/(t.next.x-t.x)-(n.next.y-n.y)/(n.next.x-n.x)}function s(t,n){const e=function(t,n){let e=n;const r=t.x,x=t.y;let o,i=-1/0;if(O(t,e))return e;for(let n=0,l=0;n<p;n++,l+=4){if(x<h[l+1]||x>h[l+3]||h[l]>r||h[l+2]<=i)continue;const f=w(n);e=g(n);do{if(e.prev.next===e){if(O(t,e.next))return e.next;if(x<=e.y&&x>=e.next.y&&e.next.y!==e.y){const t=e.x+(x-e.y)*(e.next.x-e.x)/(e.next.y-e.y);if(t<=r&&t>i&&(i=t,o=e.x<e.next.x?e:e.next,t===r))return o}}e=e.next}while(e!==f)}if(!o)return null;const l=o.x,f=o.y,u=Math.min(x,f),c=Math.max(x,f);let y=1/0;for(let n=0,s=0;n<p;n++,s+=4){if(h[s+2]<l||h[s]>r||h[s+3]<u||h[s+1]>c)continue;const a=w(n);e=g(n);do{if(e.prev.next===e&&r>=e.x&&e.x>=l&&r!==e.x&&F(x<f?r:i,x,l,f,x<f?i:r,x,e.x,e.y)){const n=Math.abs(x-e.y)/(r-e.x);(q(e,t)||e.y===x&&e.next.y===x&&e.next.x>r)&&(n<y||n===y&&(e.x>o.x||e.x===o.x&&m(o,e)))&&(o=e,y=n)}e=e.next}while(e!==a)}return o}(t,n);if(!e)return n;const r=B(e,t);return M(e,r.next.next),x(r,r.next),x(e,e.next)}const a=16;let h=new Float64Array(0),p=0;const v=[],d=[];function M(t,n){let e=t;do{const t=p++;v[t]=e;let r=1/0,x=1/0,o=-1/0,i=-1/0,l=0;do{const n=e.next;e.z=t,e.x<r&&(r=e.x),e.x>o&&(o=e.x),e.y<x&&(x=e.y),e.y>i&&(i=e.y),n.x<r&&(r=n.x),n.x>o&&(o=n.x),n.y<x&&(x=n.y),n.y>i&&(i=n.y),e=n}while(++l<a&&e!==n);d[t]=e;const f=4*t;h[f]=r,h[f+1]=x,h[f+2]=o,h[f+3]=i}while(e!==n)}function w(t){let n=d[t];for(;n.prev.next!==n;)n=n.next;return d[t]=n,n}function g(t){let n=v[t];for(;n.prev.next!==n;)n=n.next;return v[t]=n,n}function m(t,n){return _(t.prev,t,n.prev)<0&&_(n.next,t,t.next)<0}const Z=[];let A=[],b=new Uint32Array(0),z=new Uint32Array(0);const U=new Uint32Array(256);function I(t,n,e,r,x,o){U.fill(0);for(let n=0;n<t;n++)U[e[n]>>>o&255]++;let i=0;for(let t=0;t<256;t++){const n=U[t];U[t]=i,i+=n}for(let i=0;i<t;i++){const t=e[i],l=U[t>>>o&255]++;r[l]=n[i],x[l]=t}}function j(t,n,e,r,x){return(t=1431655765&((t=858993459&((t=252645135&((t=16711935&((t=(t-e)*x|0)|t<<8))|t<<4))|t<<2))|t<<1))|(n=1431655765&((n=858993459&((n=252645135&((n=16711935&((n=(n-r)*x|0)|n<<8))|n<<4))|n<<2))|n<<1))<<1}function k(t){let n=t,e=t;do{(n.x<e.x||n.x===e.x&&n.y<e.y)&&(e=n),n=n.next}while(n!==t);return e}function F(t,n,e,r,x,o,i,l){return(x-i)*(n-l)>=(t-i)*(o-l)&&(t-i)*(r-l)>=(e-i)*(n-l)&&(e-i)*(o-l)>=(x-i)*(r-l)}function T(t,n){const e=O(t,n)&&_(t.prev,t,t.next)>0&&_(n.prev,n,n.next)>0;return t.next.i!==n.i&&(e||q(t,n)&&q(n,t)&&(0!==_(t.prev,t,n.prev)||0!==_(t,n.prev,n)))&&!function(t,n){const e=Math.min(t.x,n.x),r=Math.max(t.x,n.x),x=Math.min(t.y,n.y),o=Math.max(t.y,n.y);let i=t;do{const l=i.next;if(i.x>r&&l.x>r||i.x<e&&l.x<e||i.y>o&&l.y>o||i.y<x&&l.y<x)i=l;else{if(i.i!==t.i&&l.i!==t.i&&i.i!==n.i&&l.i!==n.i&&P(i,l,t,n))return!0;i=l}}while(i!==t);return!1}(t,n)&&(e||function(t,n){let e=t,r=!1;const x=(t.x+n.x)/2,o=(t.y+n.y)/2;do{const t=e.next;e.y>o!=t.y>o&&x<(t.x-e.x)*(o-e.y)/(t.y-e.y)+e.x&&(r=!r),e=t}while(e!==t);return r}(t,n))}function _(t,n,e){return(n.y-t.y)*(e.x-n.x)-(n.x-t.x)*(e.y-n.y)}function O(t,n){return t.x===n.x&&t.y===n.y}function P(t,n,e,r,x=!0){const o=_(t,n,e),i=_(t,n,r),l=_(e,r,t),f=_(e,r,n);return(o>0&&i<0||o<0&&i>0)&&(l>0&&f<0||l<0&&f>0)||!!x&&(!(0!==o||!S(t,e,n))||(!(0!==i||!S(t,r,n))||(!(0!==l||!S(e,t,r))||!(0!==f||!S(e,n,r)))))}function S(t,n,e){return n.x<=Math.max(t.x,e.x)&&n.x>=Math.min(t.x,e.x)&&n.y<=Math.max(t.y,e.y)&&n.y>=Math.min(t.y,e.y)}function q(t,n){return _(t.prev,t,t.next)<0?_(t,n,t.next)>=0&&_(t,t.prev,n)>=0:_(t,n,t.prev)<0||_(t,t.next,n)<0}function B(t,n){const e=E(t.i,t.x,t.y),r=E(n.i,n.x,n.y),x=t.next,o=n.prev;return t.next=n,n.prev=t,e.next=x,x.prev=e,r.next=e,e.prev=r,o.next=r,r.prev=o,r}function C(t,n,e,r){const x=E(t,n,e);return r?(x.next=r.next,x.prev=r,r.next.prev=x,r.next=x):(x.prev=x,x.next=x),x}function D(t){t.next.prev=t.prev,t.prev.next=t.next,t.prevZ&&(t.prevZ.nextZ=t.nextZ),t.nextZ&&(t.nextZ.prevZ=t.prevZ),c&&function(t,n){const e=4*t.z;n.x<h[e]&&(h[e]=n.x),n.y<h[e+1]&&(h[e+1]=n.y),n.x>h[e+2]&&(h[e+2]=n.x),n.y>h[e+3]&&(h[e+3]=n.y)}(t.prev,t.next)}function E(t,n,e){return{i:t,x:n,y:e,prev:null,next:null,z:0,prevZ:null,nextZ:null}}function G(t,n,e,r){let x=0;for(let o=n,i=e-r;o<e;o+=r)x+=(t[i]-t[o])*(t[o+1]+t[i+1]),i=o;return x}let H,J,K,L,N,Q=0,R=0;function V(t,n,e,r,x,o){return(e-t)*(o-n)-(r-n)*(x-t)}function W(t,n,e,r,x,o,i,l){const f=t-i,u=n-l,c=e-i,y=r-l,s=x-i,a=o-l,h=f*f+u*u,p=c*c+y*y,v=s*s+a*a,d=h+p+v;return f*(y*v-p*a)-u*(c*v-p*s)+h*(c*a-y*s)<=1e-13*d*d}function X(t){return t-t%3+(t+1)%3}t.default=function(t,e,i=2){const l=e&&e.length,f=l?e[0]*i:t.length;n.size&&n.clear();let u=r(t,0,f,i,!0);const v=[];if(!u||u.next===u.prev)return v;let d=0,w=0,g=0;if(l&&(u=function(t,e,o,i){const l=[];for(let x=0,o=e.length;x<o;x++){const f=r(t,e[x]*i,x<o-1?e[x+1]*i:t.length,i,!1);f===f.next&&n.add(f),l.push(k(f))}l.sort(y),function(t,n){const e=Math.ceil((t+2*n)/a)+n+2;h.length<4*e&&(h=new Float64Array(4*e));p=0}(t.length/i,e.length),M(o,o),c=!0;for(let t=0;t<l.length;t++)o=s(l[t],o);return c=!1,x(o)}(t,e,u,i)),t.length>80*i){d=t[0],w=t[1];let n=d,e=w;for(let r=i;r<f;r+=i){const x=t[r],o=t[r+1];x<d&&(d=x),o<w&&(w=o),x>n&&(n=x),o>e&&(e=o)}g=Math.max(n-d,e-w),g=0!==g?32767/g:0}return o(u,v,d,w,g),v},t.deviation=function(t,n,e,r){const x=n&&n.length,o=x?n[0]*e:t.length;let i=Math.abs(G(t,0,o,e));if(x)for(let r=0,x=n.length;r<x;r++){const o=n[r]*e,l=r<x-1?n[r+1]*e:t.length;i-=Math.abs(G(t,o,l,e))}let l=0;for(let n=0;n<r.length;n+=3){const x=r[n]*e,o=r[n+1]*e,i=r[n+2]*e;l+=Math.abs((t[x]-t[i])*(t[o+1]-t[x+1])-(t[x]-t[o])*(t[i+1]-t[x+1]))}return 0===i&&0===l?0:Math.abs((l-i)/i)},t.flatten=function(t){const n=[],e=[],r=t[0][0].length;let x=0,o=0;for(const i of t){for(const t of i)for(let e=0;e<r;e++)n.push(t[e]);o&&(x+=o,e.push(x)),o=i.length}return{vertices:n,holes:e,dimensions:r}},t.refine=function(t,n,e=2){const r=t,x=r.length;if(x<6)return;!function(t){(!H||H.length<t)&&(H=new Int32Array(t));(!J||J.length<t)&&(J=new Int32Array(t));(!N||N.length<t)&&(N=new Uint8Array(t));let n=1;for(;n<4*t;)n<<=1;(!K||K.length<n)&&(K=new Int32Array(n),L=new Uint32Array(n));Q=n-1}(x),R++,J.fill(-1,0,x);let o=0;for(let t=0;t<x;t++){const n=r[t],e=r[X(t)],x=n<e?n:e,i=n<e?e:n;let l=(Math.imul(x,2654435761)^Math.imul(i,2246822507))&Q;for(;L[l]===R;){const n=K[l];if(-1!==n){const e=r[n],f=r[X(n)];if(e===x&&f===i||e===i&&f===x){J[t]=n,J[n]=t,K[l]=-1,N[n]=1,H[o++]=n;break}}l=l+1&Q}L[l]!==R&&(K[l]=t,L[l]=R)}for(;o>0;){const t=H[--o];N[t]=0;const x=J[t];if(-1===x)continue;const i=t-t%3,l=x-x%3,f=i+(t+2)%3,u=i+(t+1)%3,c=l+(x+2)%3,y=l+(x+1)%3,s=r[f],a=r[t],h=r[u],p=r[c],v=n[s*e],d=n[s*e+1],M=n[a*e],w=n[a*e+1],g=n[h*e],m=n[h*e+1],Z=n[p*e],A=n[p*e+1];if(!W(v,d,M,w,g,m,Z,A)&&V(v,d,M,w,Z,A)>0&&V(v,d,Z,A,g,m)>0){r[t]=p,r[x]=s;const n=J[c],e=J[f];J[t]=n,-1!==n&&(J[n]=t),J[x]=e,-1!==e&&(J[e]=x),J[f]=c,J[c]=f,-1!==n&&0===N[t]&&(N[t]=1,H[o++]=t),-1!==e&&0===N[x]&&(N[x]=1,H[o++]=x),-1!==J[u]&&0===N[u]&&(N[u]=1,H[o++]=u),-1!==J[y]&&0===N[y]&&(N[y]=1,H[o++]=y)}}},Object.defineProperty(t,"__esModule",{value:!0})});
+
+const _ecns = (typeof earcut !== 'undefined') ? earcut :
+  (typeof module !== 'undefined' && module.exports) ? module.exports : null;
+const _earcut = (typeof _ecns === 'function') ? _ecns : (_ecns && (_ecns.default || _ecns.earcut));
+
+function signedArea(poly) {
+  let s = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const j = (i + 1) % poly.length;
+    s += poly[i][0]*poly[j][1] - poly[j][0]*poly[i][1];
+  }
+  return s / 2;
+}
+
+/* Triangulate polygon-with-holes at height z, emit into mesh. up=normal +z. */
+function facePolyHoles(m, outer, holes, z, up) {
+  const coords = [];
+  const holeIdx = [];
+  for (const p of outer) coords.push(p[0], p[1]);
+  const all = [outer];
+  for (const h of holes) {
+    holeIdx.push(coords.length / 2);
+    for (const p of h) coords.push(p[0], p[1]);
+    all.push(h);
+  }
+  const tri = _earcut(coords, holeIdx.length ? holeIdx : null);
+  const P = i => [coords[2*i], coords[2*i+1], z];
+  for (let k = 0; k < tri.length; k += 3) {
+    const A = P(tri[k]), B = P(tri[k+1]), C = P(tri[k+2]);
+    if (up) addTri(m, A, B, C); else addTri(m, A, C, B);
+  }
+}
+
+/* ---------------- arc utilities (inner pot) ---------------- */
+
+function circleCircleIntersect(c1, r1, c2, r2) {
+  const dx = c2[0]-c1[0], dy = c2[1]-c1[1];
+  const d = Math.hypot(dx, dy);
+  const a = (r1*r1 - r2*r2 + d*d) / (2*d);
+  const h = Math.sqrt(Math.max(0, r1*r1 - a*a));
+  const mx = c1[0] + a*dx/d, my = c1[1] + a*dy/d;
+  return [
+    [mx + h*dy/d, my - h*dx/d],
+    [mx - h*dy/d, my + h*dx/d],
+  ];
+}
+/* Sample arc on circle (c,r) from angle a0 to a1 in direction dir (+1 ccw, -1 cw),
+   n segments, excluding endpoint. */
+function arcPoints(c, r, a0, a1, dir, n) {
+  let span = dir * (a1 - a0);
+  while (span < 0) span += 2*Math.PI;
+  while (span >= 2*Math.PI) span -= 2*Math.PI;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + dir * span * (i / n);
+    pts.push([c[0] + r*Math.cos(a), c[1] + r*Math.sin(a)]);
+  }
+  return pts;
+}
+function circlePoly(c, r, n, ccw) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (ccw ? 1 : -1) * 2*Math.PI * i / n;
+    pts.push([c[0] + r*Math.cos(a), c[1] + r*Math.sin(a)]);
+  }
+  return pts;
+}
+
+/* ---------------- OUTER POT ---------------- */
+
+function buildOuter(p) {
+  const d = derived(p);
+  const m = Mesh();
+  // adaptive facet density, snapped to a power of two so the graded cap
+  // rings halve cleanly all the way to the center
+  let N = 1024;
+  while (N < p.RIB_COUNT * p.SEG_PER_RIB) N *= 2;
+  const thetas = [];
+  for (let i = 0; i < N; i++) thetas.push(2*Math.PI*i/N);
+
+  const CHAM = 0.8, RIMF = 1.0;
+  const notchHalf = Math.asin((p.FILL_PORT_D/2) / d.BORE_R);
+  const style = p.RIB_STYLE || 'sine';
+  const ribR = t => {
+    const u = p.RIB_COUNT * t;
+    if (style === 'reeded') // rounded convex ribs, narrow valleys
+      return d.R_valley + p.RIB_DEPTH * Math.pow(0.5 + 0.5 * Math.cos(u), 0.6);
+    if (style === 'fluted') // concave carved grooves, narrow lands
+      return d.R_peak - p.RIB_DEPTH * Math.pow(0.5 + 0.5 * Math.cos(u), 0.7);
+    if (style === 'panel') { // flat facets with narrow grooves at the joints
+      const per = 2 * Math.PI / p.RIB_COUNT;
+      const local = ((t % per) + per) % per - per / 2;
+      const chord = d.R_peak * Math.cos(per / 2) / Math.cos(local);
+      const groove = p.RIB_DEPTH * Math.pow(0.5 - 0.5 * Math.cos(u), 4);
+      return Math.max(chord - groove, d.R_valley);
+    }
+    return d.R_mean + d.AMP * Math.cos(u); // soft sine
+  };
+  const RAMP = 0.12; // rad — eases the notch sides
+  const inNotchRamp = t => {
+    let a = Math.abs(t - Math.PI/2);
+    if (a > Math.PI) a = 2*Math.PI - a;
+    return a <= notchHalf + RAMP;
+  };
+  const baseInnerR = t => {
+    let a = Math.abs(t - Math.PI/2);
+    if (a > Math.PI) a = 2*Math.PI - a;
+    if (a <= notchHalf) return d.BORE_R;
+    if (a >= notchHalf + RAMP) return d.LOWER_R;
+    const s = 0.5 + 0.5*Math.cos(Math.PI * (a - notchHalf) / RAMP);
+    return d.LOWER_R + (d.BORE_R - d.LOWER_R) * s;
+  };
+
+  const ring = (rf, z) => thetas.map(t => {
+    const r = rf(t);
+    return [r*Math.cos(t), r*Math.sin(t), z];
+  });
+
+  // --- outer skin rows bottom→top ---
+  // Bands are optional: when a band is 0 the chamfer / rim round-over apply
+  // to the ribbed surface directly.
+  const BB = p.BASE_BAND_H > 0 ? Math.max(p.BASE_BAND_H, CHAM + 0.2) : 0;
+  const TB = p.TOP_BAND_H > 0 ? Math.max(p.TOP_BAND_H, RIMF + 0.2) : 0;
+  const botR = BB > 0 ? (() => d.R_peak) : ribR;   // surface at the bottom edge
+  const topR = TB > 0 ? (() => d.R_peak) : ribR;   // surface at the rim
+  const rows = [];
+  rows.push(ring(t => botR(t) - CHAM, 0));
+  rows.push(ring(botR, CHAM));
+  if (BB > 0) {
+    rows.push(ring(() => d.R_peak, BB));
+    rows.push(ring(ribR, BB));                     // step to ribs
+  }
+  if (TB > 0) {
+    rows.push(ring(ribR, p.H - TB));
+    rows.push(ring(() => d.R_peak, p.H - TB));     // step to band
+  }
+  rows.push(ring(topR, p.H - RIMF));
+  for (let k = 1; k <= 4; k++) {                   // rim quarter-round
+    const s = k / 4;
+    const drop = RIMF - Math.sqrt(Math.max(0, RIMF*RIMF - s*s*RIMF*RIMF));
+    rows.push(ring(t => topR(t) - drop, p.H - RIMF + s*RIMF));
+  }
+  for (let i = 0; i < rows.length - 1; i++) stripRings(m, rows[i], rows[i+1], false);
+
+  // --- inner skin rows bottom→top (reverse winding: normals inward) ---
+  const F = Math.min(p.RES_FILLET, p.LEDGE_Z - p.FLOOR - 0.5);
+  // Solid reservoir: thicken the below-waterline wall so 4+4 perimeter loops
+  // fuse into solid plastic (no sparse infill anywhere water touches).
+  const SOLID_T = 3.6; // extra inward wall thickness, ~4 loops at 0.45mm+
+  const resInnerR = t => (p.SOLID_RESERVOIR && !inNotchRamp(t))
+    ? Math.min(baseInnerR(t), d.LOWER_R - SOLID_T) : baseInnerR(t);
+  const filletR = (t, u) => { // u = z - FLOOR in [0,F]
+    const drop = F - Math.sqrt(Math.max(0, F*F - (F-u)*(F-u)));
+    return resInnerR(t) - drop;
+  };
+  const irows = [];
+  const KF = 6;
+  for (let k = 0; k <= KF; k++) {
+    const u = F * k / KF;
+    irows.push(ring(t => filletR(t, u), p.FLOOR + u));
+  }
+  irows.push(ring(resInnerR, p.LEDGE_Z));
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z));      // ledge step
+  irows.push(ring(() => d.BORE_R, p.H));
+  for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
+
+  // --- internal voids: self-sealing structure on stock slicer settings ---
+  // Every region around a void prints as walls or surface shells (dense by
+  // default); sparse infill has nowhere to exist, and any micro-channel
+  // dead-ends at a void instead of running through the part.
+  if (p.LATTICE) {
+    const SK = 1.6; // membrane skin thickness
+
+    // Closed ring (or arc, with end caps) cavity. flip=true reverses the
+    // shell so slicers treat it as a void inside the surrounding solid.
+    const ringVoid = (r0, r1, z0, z1, a0, a1) => {
+      const full = (a0 === undefined);
+      if (full) { a0 = 0; a1 = 2 * Math.PI; }
+      const segs = full ? 192 : 224;
+      const cnt = full ? segs : segs + 1;
+      const arc = (r, z) => {
+        const pts = [];
+        for (let i = 0; i < cnt; i++) {
+          const a = a0 + (a1 - a0) * i / segs;
+          pts.push([r * Math.cos(a), r * Math.sin(a), z]);
+        }
+        return pts;
+      };
+      const A0 = arc(r0, z0), A1 = arc(r1, z0), B0 = arc(r0, z1), B1 = arc(r1, z1);
+      const Q = (a, b, c, dd) => addQuad(m, a, dd, c, b); // reversed (cavity)
+      for (let i = 0; i < segs; i++) {
+        const j = full ? (i + 1) % segs : i + 1;
+        Q(A1[i], A1[j], B1[j], B1[i]); // outer wall
+        Q(A0[i], B0[i], B0[j], A0[j]); // inner wall
+        Q(A0[i], A0[j], A1[j], A1[i]); // bottom
+        Q(B0[i], B1[i], B1[j], B0[j]); // top
+      }
+      if (!full) {
+        Q(A0[0], A1[0], B1[0], B0[0]);                     // cap at a0
+        Q(A0[segs], B0[segs], B1[segs], A1[segs]);         // cap at a1
+      }
+    };
+
+    // floor lattice: concentric ring voids inside the slab
+    if (p.FLOOR >= 4) {
+      const rMaxF = (p.SOLID_RESERVOIR ? d.LOWER_R - 3.6 : d.LOWER_R) - 2.0;
+      for (let r = 5; r + 2.0 <= rMaxF; r += 3.6) {
+        ringVoid(r, r + 2.0, SK, p.FLOOR - SK);
+      }
+    }
+    // double-hull reservoir wall: annular gap, skipping the fill-port notch
+    if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
+      const half = notchHalf + RAMP + 0.06;
+      ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0,
+               p.FLOOR + 1.4, p.LEDGE_Z - 1.4,
+               Math.PI / 2 + half, Math.PI / 2 + 2 * Math.PI - half);
+    }
+  }
+
+  // --- caps ---
+  fanGraded(m, [0, 0, 0], rows[0], true);                    // bottom, facing down
+  fanGraded(m, [0, 0, p.FLOOR], irows[0], false);            // reservoir floor, up
+  stripRings(m, rows[rows.length-1], irows[irows.length-1], false); // rim annulus
+  return m;
+}
+
+/* ---------------- INNER POT ---------------- */
+
+function innerBoundaries(p) {
+  const d = derived(p);
+  const r_o = d.r_o;
+  const rc = p.FILL_PORT_D / 2, rb = rc + p.FILL_WALL;
+  const rCav = r_o - p.INNER_WALL;
+  const Cc = [0, r_o];
+  const AN = 256, HN = 48;
+
+  const [Pa, Pb] = circleCircleIntersect([0, 0], r_o, Cc, rc);
+  let P1 = Pa[0] > Pb[0] ? Pa : Pb;
+  let P2 = Pa[0] > Pb[0] ? Pb : Pa;
+  const angO = pt => Math.atan2(pt[1], pt[0]);
+  const angC = pt => Math.atan2(pt[1]-Cc[1], pt[0]-Cc[0]);
+
+  const arcShort = (c, r, pA, pB, n) => {
+    const a0 = Math.atan2(pA[1]-c[1], pA[0]-c[0]);
+    const a1 = Math.atan2(pB[1]-c[1], pB[0]-c[0]);
+    let s = a1 - a0;
+    while (s > Math.PI) s -= 2*Math.PI;
+    while (s < -Math.PI) s += 2*Math.PI;
+    return arcPoints(c, r, a0, a0 + s, Math.sign(s) || 1, n);
+  };
+  const blendJoints = (R, r, f) => {
+    if (f <= 0) return null;
+    const dist = Math.hypot(Cc[0], Cc[1]);
+    const R1 = R - f, R2 = r + f;
+    if (dist > R1 + R2 || dist < Math.abs(R1 - R2) || R1 <= 0) return null;
+    const [Xa, Xb] = circleCircleIntersect([0, 0], R1, Cc, R2);
+    const Xr = Xa[0] > Xb[0] ? Xa : Xb;
+    const Xl = Xa[0] > Xb[0] ? Xb : Xa;
+    const tBig = X => { const l = Math.hypot(X[0], X[1]); return [X[0]*R/l, X[1]*R/l]; };
+    const tSmall = X => {
+      const vx = X[0]-Cc[0], vy = X[1]-Cc[1], l = Math.hypot(vx, vy);
+      return [Cc[0] + vx*r/l, Cc[1] + vy*r/l];
+    };
+    return { Xr, Xl, TBr: tBig(Xr), TBl: tBig(Xl), TSr: tSmall(Xr), TSl: tSmall(Xl) };
+  };
+  const FB = Math.max(0, Math.min(p.FILL_BLEND || 0, rc * 0.9));
+
+  const outer = [];
+  const jO = blendJoints(r_o, rc, FB);
+  if (jO) {
+    outer.push(...arcPoints([0,0], r_o, angO(jO.TBl), angO(jO.TBr), +1, AN));
+    outer.push(...arcShort(jO.Xr, FB, jO.TBr, jO.TSr, 10));
+    outer.push(...arcPoints(Cc, rc, angC(jO.TSr), angC(jO.TSl), -1, HN));
+    outer.push(...arcShort(jO.Xl, FB, jO.TSl, jO.TBl, 10));
+  } else {
+    outer.push(...arcPoints([0,0], r_o, angO(P2), angO(P1), +1, AN));
+    outer.push(...arcPoints(Cc, rc, angC(P1), angC(P2), -1, HN));
+  }
+  if (signedArea(outer) < 0) outer.reverse();
+
+  const [Qa, Qb] = circleCircleIntersect([0, 0], rCav, Cc, rb);
+  let Q1 = Qa[0] > Qb[0] ? Qa : Qb;
+  let Q2 = Qa[0] > Qb[0] ? Qb : Qa;
+  const hole = [];
+  const jI = blendJoints(rCav, rb, FB);
+  if (jI) {
+    hole.push(...arcPoints([0,0], rCav, angO(jI.TBl), angO(jI.TBr), +1, AN));
+    hole.push(...arcShort(jI.Xr, FB, jI.TBr, jI.TSr, 10));
+    hole.push(...arcPoints(Cc, rb, angC(jI.TSr), angC(jI.TSl), -1, HN));
+    hole.push(...arcShort(jI.Xl, FB, jI.TSl, jI.TBl, 10));
+  } else {
+    hole.push(...arcPoints([0,0], rCav, angO(Q2), angO(Q1), +1, AN));
+    hole.push(...arcPoints(Cc, rb, angC(Q1), angC(Q2), -1, HN));
+  }
+  if (signedArea(hole) > 0) hole.reverse();
+  return { outer, hole, holeCCW: hole.slice().reverse(), r_o, rCav };
+}
+
+const lift = (poly, z) => poly.map(pt => [pt[0], pt[1], z]);
+
+/* Wick version: flat perforated floor, rests on the ledge above the water. */
+function buildInner(p) {
+  const d = derived(p);
+  const m = Mesh();
+  const h = d.innerH;
+  const b = innerBoundaries(p);
+  const rw = p.WICK_HOLE_D / 2, ws = p.WICK_SPACING / 2;
+  const wick1 = circlePoly([ ws, 0], rw, 48, false);
+  const wick2 = circlePoly([-ws, 0], rw, 48, false);
+
+  facePolyHoles(m, b.outer, [wick1, wick2], 0, false);
+  facePolyHoles(m, b.holeCCW, [wick1, wick2], p.INNER_FLOOR, true);
+  facePolyHoles(m, b.outer, [b.hole], h, true);
+
+  stripRings(m, lift(b.outer, 0), lift(b.outer, h), false);
+  stripRings(m, lift(b.holeCCW, p.INNER_FLOOR), lift(b.holeCCW, h), true);
+  stripRings(m, lift(wick1, 0), lift(wick1, p.INNER_FLOOR), false);
+  stripRings(m, lift(wick2, 0), lift(wick2, p.INNER_FLOOR), false);
+  return m;
+}
+
+/* Soil-foot (Lechuza-style) version: a perforated foot hangs into the
+   reservoir; the soil column inside it wicks water up. z=0 is the foot
+   bottom; the main floor underside (which seats on the ledge) is at z=FD. */
+function footDepth(p) {
+  return Math.max(2, p.LEDGE_Z - p.FLOOR - p.FOOT_GAP);
+}
+function buildInnerFoot(p) {
+  const d = derived(p);
+  const m = Mesh();
+  const h = d.innerH;
+  const b = innerBoundaries(p);
+  const FD = footDepth(p);
+  const fr = Math.min(p.FOOT_D / 2, b.rCav - 6);
+  const fw = p.FOOT_WALL;
+  const fi = Math.max(4, fr - fw);
+
+  // perforation ring in the foot bottom
+  const n = Math.max(3, Math.round(p.FOOT_HOLES));
+  const hr = p.FOOT_HOLE_D / 2;
+  const ringR = Math.max(hr + 1, fi * 0.55);
+  const perfs = [];
+  for (let k = 0; k < n; k++) {
+    const a = 2 * Math.PI * k / n;
+    perfs.push(circlePoly([ringR * Math.cos(a), ringR * Math.sin(a)], hr, 32, false));
+  }
+
+  const footO = circlePoly([0, 0], fr, 96, true);   // CCW
+  const footOCW = footO.slice().reverse();
+  const footI = circlePoly([0, 0], fi, 96, true);   // CCW
+  const footICW = footI.slice().reverse();
+
+  // faces
+  facePolyHoles(m, footO, perfs, 0, false);                       // foot bottom
+  facePolyHoles(m, footI, perfs, p.INNER_FLOOR, true);            // inside the foot
+  facePolyHoles(m, b.outer, [footOCW], FD, false);                // main floor underside
+  facePolyHoles(m, b.holeCCW, [footICW], FD + p.INNER_FLOOR, true); // soil floor
+  facePolyHoles(m, b.outer, [b.hole], FD + h, true);              // rim
+
+  // walls
+  stripRings(m, lift(footO, 0), lift(footO, FD), false);                          // foot outside
+  stripRings(m, lift(footICW, p.INNER_FLOOR), lift(footICW, FD + p.INNER_FLOOR), false); // foot inside
+  for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, p.INNER_FLOOR), false);    // perf tubes
+  stripRings(m, lift(b.outer, FD), lift(b.outer, FD + h), false);                 // pot outside + channel
+  stripRings(m, lift(b.holeCCW, FD + p.INNER_FLOOR), lift(b.holeCCW, FD + h), true); // cavity wall
+  return m;
+}
+
+/* ---------------- STL export ---------------- */
+
+function toBinarySTL(mesh) {
+  const nTri = mesh.tris.length / 9;
+  const buf = new ArrayBuffer(84 + nTri * 50);
+  const dv = new DataView(buf);
+  dv.setUint32(80, nTri, true);
+  let off = 84;
+  const t = mesh.tris;
+  for (let i = 0; i < nTri; i++) {
+    const b = i * 9;
+    const ax=t[b],ay=t[b+1],az=t[b+2],bx=t[b+3],by=t[b+4],bz=t[b+5],cx=t[b+6],cy=t[b+7],cz=t[b+8];
+    const ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx-ax,vy=cy-ay,vz=cz-az;
+    let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    const l=Math.hypot(nx,ny,nz)||1; nx/=l; ny/=l; nz/=l;
+    dv.setFloat32(off,nx,true); dv.setFloat32(off+4,ny,true); dv.setFloat32(off+8,nz,true);
+    dv.setFloat32(off+12,ax,true); dv.setFloat32(off+16,ay,true); dv.setFloat32(off+20,az,true);
+    dv.setFloat32(off+24,bx,true); dv.setFloat32(off+28,by,true); dv.setFloat32(off+32,bz,true);
+    dv.setFloat32(off+36,cx,true); dv.setFloat32(off+40,cy,true); dv.setFloat32(off+44,cz,true);
+    dv.setUint16(off+48,0,true);
+    off += 50;
+  }
+  return buf;
+}
+
+
+/* ---------------- Bambu Studio project 3MF export ---------------- */
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+/* Minimal ZIP writer (stored, no compression). files: [{name, data:Uint8Array}] */
+function makeZip(files) {
+  const chunks = [], central = [];
+  let offset = 0;
+  const enc = new TextEncoder();
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const crc = crc32(f.data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true);
+    lh.setUint16(4, 20, true);
+    lh.setUint32(14, crc, true);
+    lh.setUint32(18, f.data.length, true);
+    lh.setUint32(22, f.data.length, true);
+    lh.setUint16(26, name.length, true);
+    chunks.push(new Uint8Array(lh.buffer), name, f.data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true);
+    ch.setUint16(6, 20, true);
+    ch.setUint32(16, crc, true);
+    ch.setUint32(20, f.data.length, true);
+    ch.setUint32(24, f.data.length, true);
+    ch.setUint16(28, name.length, true);
+    ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + f.data.length;
+  }
+  let cdSize = 0;
+  for (const c of central) cdSize += c.length;
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 0x06054b50, true);
+  eocd.setUint16(8, files.length, true);
+  eocd.setUint16(10, files.length, true);
+  eocd.setUint32(12, cdSize, true);
+  eocd.setUint32(16, offset, true);
+  const total = offset + cdSize + 22;
+  const out = new Uint8Array(total);
+  let p = 0;
+  for (const c of [...chunks, ...central, new Uint8Array(eocd.buffer)]) { out.set(c, p); p += c.length; }
+  return out;
+}
+
+/* Indexed mesh XML for one object from a triangle soup. */
+function meshToXml(mesh) {
+  const map = new Map();
+  const verts = [];
+  const tris = [];
+  const t = mesh.tris;
+  const key = (x, y, z) => x.toFixed(3) + ',' + y.toFixed(3) + ',' + z.toFixed(3);
+  for (let i = 0; i < t.length; i += 3) {
+    const k = key(t[i], t[i+1], t[i+2]);
+    let idx = map.get(k);
+    if (idx === undefined) {
+      idx = verts.length;
+      verts.push([t[i], t[i+1], t[i+2]]);
+      map.set(k, idx);
+    }
+    tris.push(idx);
+  }
+  const vx = verts.map(v => `<vertex x="${v[0].toFixed(3)}" y="${v[1].toFixed(3)}" z="${v[2].toFixed(3)}"/>`).join('');
+  const tx = [];
+  for (let i = 0; i < tris.length; i += 3) {
+    if (tris[i] === tris[i+1] || tris[i+1] === tris[i+2] || tris[i] === tris[i+2]) continue;
+    tx.push(`<triangle v1="${tris[i]}" v2="${tris[i+1]}" v3="${tris[i+2]}"/>`);
+  }
+  return `<mesh><vertices>${vx}</vertices><triangles>${tx.join('')}</triangles></mesh>`;
+}
+
+/* Leakproof PETG process overrides shipped inside the project. */
+function projectSettings() {
+  return {
+    "from": "project",
+    "name": "wellpot",
+    "print_settings_id": "0.20mm Standard @BBL A1",
+    "printer_settings_id": "Bambu Lab A1 0.4 nozzle",
+    "filament_settings_id": ["Generic PETG"],
+    "infill_direction": "30",
+    "different_settings_to_system": [
+      "infill_direction",
+      "", ""
+    ],
+    "version": "02.00.00.00"
+  };
+}
+
+function buildProject3MF(p) {
+  const outer = buildOuter(p);
+  const inner = (p.MODE === 'foot') ? buildInnerFoot(p) : buildInner(p);
+  const d = derived(p);
+  const gap = d.r_o * 2 + 24;
+  const cx = 128, cy = 128;
+  const enc = new TextEncoder();
+
+  const model =
+`<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">
+ <metadata name="Application">BambuStudio-02.00.00.00</metadata>
+ <metadata name="BambuStudio:3mfVersion">1</metadata>
+ <metadata name="Copyright"></metadata>
+ <metadata name="CreationDate">2026-08-06</metadata>
+ <metadata name="ModificationDate">2026-08-06</metadata>
+ <resources>
+  <object id="1" type="model">${meshToXml(outer)}</object>
+  <object id="2" type="model">${meshToXml(inner)}</object>
+ </resources>
+ <build>
+  <item objectid="1" transform="1 0 0 0 1 0 0 0 1 ${cx - gap/2} ${cy} 0"/>
+  <item objectid="2" transform="1 0 0 0 1 0 0 0 1 ${cx + gap/2} ${cy} 0"/>
+ </build>
+</model>`;
+
+  const contentTypes =
+`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+ <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+ <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+ <Default Extension="config" ContentType="text/xml"/>
+</Types>`;
+
+  const rels =
+`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+ <Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`;
+
+  const modelSettings =
+`<?xml version="1.0" encoding="UTF-8"?>
+<config>
+ <object id="1"><metadata key="name" value="outer_pot"/></object>
+ <object id="2"><metadata key="name" value="inner_pot"/></object>
+ <plate>
+  <metadata key="plater_id" value="1"/>
+  <model_instance><metadata key="object_id" value="1"/><metadata key="instance_id" value="0"/></model_instance>
+  <model_instance><metadata key="object_id" value="2"/><metadata key="instance_id" value="0"/></model_instance>
+ </plate>
+</config>`;
+
+  return makeZip([
+    { name: "[Content_Types].xml", data: enc.encode(contentTypes) },
+    { name: "_rels/.rels", data: enc.encode(rels) },
+    { name: "3D/3dmodel.model", data: enc.encode(model) },
+    { name: "Metadata/model_settings.config", data: enc.encode(modelSettings) },
+    { name: "Metadata/project_settings.config", data: enc.encode(JSON.stringify(projectSettings(), null, 1)) },
+  ]);
+}
+
+const PotCore = { defaultParams, derived, buildOuter, buildInner, buildInnerFoot, footDepth, toBinarySTL, buildProject3MF };
+if (typeof module !== 'undefined') module.exports = PotCore;
+if (typeof window !== 'undefined') window.PotCore = PotCore;
+
+</script>
+<script>
+(function () {
+  const PC = window.PotCore;
+  const params = PC.defaultParams();
+  let lastRibDepth = 1.3;
+
+  const host = document.getElementById('controls');
+  const inputs = {};
+
+  /* ----- builders ----- */
+  function paramRow(key, label, min, max, step, unit) {
+    const row = document.createElement('div');
+    row.className = 'param';
+    row.dataset.key = key;
+    row.innerHTML =
+      '<div class="row1"><label>' + label + (unit ? ' <span class="unit">' + unit + '</span>' : '') + '</label>' +
+      '<input type="number" step="' + step + '" value="' + params[key] + '"></div>' +
+      '<input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + params[key] + '">';
+    const [num, rng] = row.querySelectorAll('input');
+    const set = v => {
+      const n = parseFloat(v);
+      v = Math.max(min, Math.min(max, isNaN(n) ? params[key] : n));
+      params[key] = v; num.value = v; rng.value = v;
+      markPreset(null);
+      scheduleBuild();
+    };
+    num.addEventListener('change', () => set(num.value));
+    rng.addEventListener('input', () => set(rng.value));
+    inputs[key] = { num, rng };
+    return row;
+  }
+  function card(title, water) {
+    const c = document.createElement('div');
+    c.className = 'card' + (water ? ' water-card' : '');
+    if (title) c.innerHTML = '<h2>' + title + '</h2>';
+    host.appendChild(c);
+    return c;
+  }
+
+  const PLANTS = [
+    { n: 'Small', w: [12, 30], c: 'size', note: 'A little pot — herbs starting out, small houseplants, tight spaces.',
+      p: { OUTER_D: 100, H: 110, LEDGE_Z: 25, RIB_COUNT: 36, RIB_DEPTH: 1.3, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Medium', w: [20, 50], c: 'size', note: 'The all-rounder — a comfortable home for most herbs and mid-size plants.',
+      p: { OUTER_D: 130, H: 150, LEDGE_Z: 35, RIB_COUNT: 48, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Large', w: [30, 75], c: 'size', note: 'A statement pot — bigger plants, longer stretches between refills.',
+      p: { OUTER_D: 170, H: 180, LEDGE_Z: 45, RIB_COUNT: 62, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 3 } },
+    { n: 'Test pot', c: 'size', note: 'A quick print to confirm your printer seals — you only need the outer pot. Fill it with water and check it holds overnight. Afterwards it makes a fine propagation cup, succulent planter, or desk catchall.',
+      p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0, WICK_SPACING: 20, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Basil', w: [40, 80], c: 'herbs', note: 'Drinks hard and often — wide foot, open perforations, water always in reach.',
+      p: { OUTER_D: 140, H: 160, LEDGE_Z: 40, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+    { n: 'Mint', w: [40, 80], c: 'herbs', note: 'Practically aquatic — it will find the water, and then take over the pot.',
+      p: { OUTER_D: 120, H: 130, LEDGE_Z: 35, RIB_COUNT: 44, RIB_DEPTH: 1.3, FOOT_D: 40, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+    { n: 'Parsley', w: [25, 50], c: 'herbs', note: 'Grows a taproot — this one is tall so the root has somewhere to go.',
+      p: { OUTER_D: 140, H: 195, LEDGE_Z: 40, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 40, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Cilantro', w: [20, 45], c: 'herbs', note: 'A smaller taproot than parsley — tall-ish pot, steady moisture.',
+      p: { OUTER_D: 120, H: 170, LEDGE_Z: 35, RIB_COUNT: 44, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Oregano', w: [10, 25], c: 'herbs', note: 'Likes to dry out between drinks — the foot sits higher so it gets dry spells.',
+      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30, RIB_COUNT: 44, RIB_DEPTH: 1.3, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
+    { n: 'Thyme', w: [8, 20], c: 'herbs', note: 'Mediterranean and modest — small pot, small foot, real dry spells.',
+      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25, RIB_COUNT: 36, RIB_DEPTH: 1.3, FOOT_D: 24, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
+    { n: 'Rosemary', w: [10, 25], c: 'herbs', note: 'Deep roots, dry habits — tall pot, high foot, let the reservoir run empty.',
+      p: { OUTER_D: 140, H: 180, LEDGE_Z: 30, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 8 } },
+    { n: 'Chives', w: [15, 35], c: 'herbs', note: 'Shallow and easygoing — compact pot, steady sips.',
+      p: { OUTER_D: 110, H: 120, LEDGE_Z: 30, RIB_COUNT: 40, RIB_DEPTH: 1.3, FOOT_D: 32, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Pothos', w: [15, 40], c: 'green', note: 'Forgiving as they come — moderate everything, hard to get wrong.',
+      p: { OUTER_D: 140, H: 140, LEDGE_Z: 35, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
+    { n: 'Peace lily', w: [30, 60], c: 'green', note: 'Loves constant moisture — big reservoir, wide open foot.',
+      p: { OUTER_D: 160, H: 160, LEDGE_Z: 40, RIB_COUNT: 58, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+    { n: 'Fern', w: [30, 60], c: 'green', note: 'A humidity creature — keep the water close and never let it fully dry.',
+      p: { OUTER_D: 150, H: 140, LEDGE_Z: 40, RIB_COUNT: 54, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+    { n: 'African violet', w: [8, 20], c: 'green', note: 'The original self-watered houseplant — small pot, gentle steady moisture.',
+      p: { OUTER_D: 100, H: 90, LEDGE_Z: 25, RIB_COUNT: 36, RIB_DEPTH: 1.3, FOOT_D: 30, FOOT_HOLE_D: 4, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+    { n: 'Spider plant', w: [15, 35], c: 'green', note: 'Tolerant and cheerful — moderate pot, moderate water.',
+      p: { OUTER_D: 130, H: 140, LEDGE_Z: 35, RIB_COUNT: 48, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
+    { n: 'Cherry tomato', w: [90, 200], c: 'veg', note: 'A serious drinker — the biggest pot here, and it will still want refills.',
+      p: { OUTER_D: 200, H: 200, LEDGE_Z: 55, RIB_COUNT: 74, RIB_DEPTH: 1.3, FOOT_D: 50, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+    { n: 'Lettuce', w: [40, 80], c: 'veg', note: 'Shallow roots, thirsty leaves — wide pot, generous reservoir.',
+      p: { OUTER_D: 160, H: 130, LEDGE_Z: 45, RIB_COUNT: 58, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+  ];
+
+  /* ----- plant picker ----- */
+  const plantCard = card('what will live in it?');
+  plantCard.innerHTML +=
+    '<div class="seg-row" id="plantCats">' +
+    '<div class="seg on" data-cat="size">sizes</div>' +
+    '<div class="seg" data-cat="herbs">herbs</div>' +
+    '<div class="seg" data-cat="green">indoor</div>' +
+    '<div class="seg" data-cat="veg">veg</div></div>' +
+    '<div id="plantChips"></div>' +
+    '<div id="plantNote"></div>';
+  const plantChips = plantCard.querySelector('#plantChips');
+  const plantNote = plantCard.querySelector('#plantNote');
+  const plantCats = plantCard.querySelector('#plantCats');
+  let currentCat = 'size';
+  function renderPlantChips(selectedName) {
+    plantChips.innerHTML = '';
+    for (const pl of PLANTS.filter(x => x.c === currentCat)) {
+      const chip = document.createElement('div');
+      chip.className = 'chip' + (pl.n === selectedName ? ' on' : '');
+      chip.textContent = pl.n;
+      chip.addEventListener('click', () => applyPlant(pl));
+      plantChips.appendChild(chip);
+    }
+  }
+  plantCats.addEventListener('click', e => {
+    const el = e.target.closest('.seg');
+    if (!el) return;
+    currentCat = el.dataset.cat;
+    plantCats.querySelectorAll('.seg').forEach(x => x.classList.toggle('on', x === el));
+    renderPlantChips(currentPlant);
+  });
+  let currentPlant = null, currentDraw = null;
+  function markPreset(name) {
+    currentPlant = name;
+    if (!name) currentDraw = null;
+    renderPlantChips(name);
+    if (!name) plantNote.textContent = 'Custom size — pick a plant any time to start over from a good fit.';
+  }
+  function applyPlant(pl) {
+    Object.assign(params, pl.p);
+    currentPlant = pl.n;
+    currentDraw = pl.w;
+    plantNote.textContent = pl.note;
+    renderPlantChips(pl.n);
+    syncAll();
+    scheduleBuild();
+  }
+
+  /* ----- watering mode ----- */
+  const modeCard = card(null);
+  modeCard.innerHTML =
+    '<div id="modeTabs"><div class="tab on" data-mode="foot">Soil foot</div><div class="tab" data-mode="wick">Wick</div></div>' +
+    '<div id="modeCaption"></div>';
+  const captions = {
+    foot: 'A perforated foot dips into the water below — the soil inside it drinks for the plant. Nothing to replace, nothing to forget.',
+    wick: 'You supply the wick: cotton string, a shoelace, or a strip of microfiber cloth. Thread it through the two floor holes so it hangs into the water below. ' +
+      '<a href="https://www.youtube.com/results?search_query=wick+watering+planter+how+to" target="_blank" rel="noopener">See how it\'s done →</a>',
+  };
+  params.MODE = 'foot';
+  const modeTabs = modeCard.querySelector('#modeTabs');
+  const modeCaption = modeCard.querySelector('#modeCaption');
+  modeCaption.innerHTML = captions.foot;
+  modeTabs.addEventListener('click', e => {
+    const el = e.target.closest('.tab');
+    if (!el) return;
+    modeTabs.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === el));
+    params.MODE = el.dataset.mode;
+    modeCaption.innerHTML = captions[params.MODE];
+    document.querySelectorAll('[data-mode-only]').forEach(el2 =>
+      el2.classList.toggle('hidden', el2.dataset.modeOnly !== params.MODE));
+    scheduleBuild();
+  });
+
+  /* ----- size ----- */
+  const sizeCard = card('size');
+  sizeCard.appendChild(paramRow('OUTER_D', 'Diameter', 70, 200, 1, 'mm'));
+  sizeCard.appendChild(paramRow('H', 'Height', 30, 200, 1, 'mm'));
+
+  /* ----- look ----- */
+  const lookCard = card('look');
+  const styleSel = document.createElement('select');
+  styleSel.innerHTML =
+    '<option value="sine">Soft ribs</option>' +
+    '<option value="reeded">Reeded ribs</option>' +
+    '<option value="fluted">Fluted grooves</option>' +
+    '<option value="panel">Flat panels</option>' +
+    '<option value="smooth">Smooth</option>';
+  styleSel.addEventListener('change', () => {
+    if (styleSel.value === 'smooth') {
+      if (params.RIB_DEPTH > 0) lastRibDepth = params.RIB_DEPTH;
+      params.RIB_DEPTH = 0;
+    } else {
+      params.RIB_STYLE = styleSel.value;
+      if (params.RIB_DEPTH === 0) params.RIB_DEPTH = lastRibDepth || 1.3;
+    }
+    syncAll();
+    markPreset(null);
+    scheduleBuild();
+  });
+  lookCard.appendChild(styleSel);
+  const texRows = [
+    paramRow('RIB_COUNT', 'Texture count', 6, 200, 2, ''),
+    paramRow('RIB_DEPTH', 'Texture depth', 0, 3, 0.1, 'mm'),
+  ];
+  texRows.forEach(r => { r.classList.add('texRow'); lookCard.appendChild(r); });
+  lookCard.appendChild(paramRow('BASE_BAND_H', 'Bottom band (0 = none)', 0, 40, 1, 'mm'));
+  lookCard.appendChild(paramRow('TOP_BAND_H', 'Top band (0 = none)', 0, 30, 1, 'mm'));
+
+  /* ----- watering ----- */
+  const waterCard = card('watering', true);
+  waterCard.appendChild(paramRow('LEDGE_Z', 'Water reservoir depth', 12, 60, 1, 'mm'));
+  waterCard.appendChild(paramRow('FILL_PORT_D', 'Watering spout width', 8, 24, 0.5, 'mm'));
+  const wickWrap = document.createElement('div');
+  wickWrap.dataset.modeOnly = 'wick';
+  wickWrap.classList.add('hidden');
+  wickWrap.appendChild(paramRow('WICK_HOLE_D', 'Wick hole size', 4, 16, 0.5, 'mm'));
+  wickWrap.appendChild(paramRow('WICK_SPACING', 'Wick hole spacing', 14, 60, 1, 'mm'));
+  waterCard.appendChild(wickWrap);
+  const footWrap = document.createElement('div');
+  footWrap.dataset.modeOnly = 'foot';
+  footWrap.appendChild(paramRow('FOOT_D', 'Foot width', 20, 70, 1, 'mm'));
+  footWrap.appendChild(paramRow('FOOT_HOLE_D', 'Perforation size', 3, 8, 0.5, 'mm'));
+  footWrap.appendChild(paramRow('FOOT_HOLES', 'Perforations', 3, 12, 1, ''));
+  footWrap.appendChild(paramRow('FOOT_GAP', 'Foot gap above floor', 1, 10, 0.5, 'mm'));
+  waterCard.appendChild(footWrap);
+
+  /* ----- advanced ----- */
+  const advCard = card(null);
+  const det = document.createElement('details');
+  det.innerHTML = '<summary>Advanced</summary><div class="inner"></div>';
+  advCard.appendChild(det);
+  const adv = det.querySelector('.inner');
+  adv.appendChild(paramRow('WALL', 'Outer wall thickness', 1.6, 4, 0.1, 'mm'));
+  adv.appendChild(paramRow('FLOOR', 'Base thickness', 2, 8, 0.5, 'mm'));
+  adv.appendChild(paramRow('LEDGE_W', 'Ledge width', 3, 8, 0.5, 'mm'));
+  adv.appendChild(paramRow('RES_FILLET', 'Base corner round-over', 0, 10, 0.5, 'mm'));
+  adv.appendChild(paramRow('CLEARANCE', 'Fit clearance', 0.2, 1, 0.05, 'mm'));
+  adv.appendChild(paramRow('INNER_WALL', 'Inner pot wall', 1.2, 4, 0.1, 'mm'));
+  adv.appendChild(paramRow('INNER_FLOOR', 'Inner pot floor', 1.5, 5, 0.25, 'mm'));
+  adv.appendChild(paramRow('RIM_DROP', 'Inner rim drop', 0, 10, 0.5, 'mm'));
+  adv.appendChild(paramRow('FILL_WALL', 'Spout wall', 1.2, 3, 0.1, 'mm'));
+  adv.appendChild(paramRow('FILL_BLEND', 'Spout blend', 0, 6, 0.5, 'mm'));
+  const fw = paramRow('FOOT_WALL', 'Foot wall', 1.6, 3, 0.1, 'mm');
+  fw.dataset.modeOnly = 'foot';
+  adv.appendChild(fw);
+
+
+  const foot = document.createElement('div');
+  foot.className = 'footnote';
+  foot.innerHTML = 'Free to print and share. ' +
+    'If your pot turns out well, <a href="https://ko-fi.com/wellpot" target="_blank" rel="noopener">tips keep this growing</a>.';
+  host.appendChild(foot);
+
+  function syncAll() {
+    for (const k in inputs) {
+      if (params[k] !== undefined) { inputs[k].num.value = params[k]; inputs[k].rng.value = params[k]; }
+    }
+    styleSel.value = params.RIB_DEPTH === 0 ? 'smooth' : (params.RIB_STYLE || 'sine');
+    texRows.forEach(r => r.classList.toggle('hidden', params.RIB_DEPTH === 0));
+    document.querySelectorAll('[data-mode-only]').forEach(el =>
+      el.classList.toggle('hidden', el.dataset.modeOnly !== params.MODE));
+  }
+
+  function sanity() {
+    const msgs = [];
+    if (params.LEDGE_Z > params.H - 12) { params.LEDGE_Z = params.H - 12; msgs.push('Reservoir made a little shallower so the pot keeps a working rim.'); }
+    if (params.LEDGE_Z < params.FLOOR + params.RES_FILLET + 3) { params.RES_FILLET = Math.max(0, params.LEDGE_Z - params.FLOOR - 3); msgs.push('Base round-over reduced to fit the reservoir.'); }
+    const d = PC.derived(params);
+    const maxWick = (d.r_o - params.INNER_WALL - 2) * 2 - params.WICK_HOLE_D;
+    if (params.WICK_SPACING > maxWick) { params.WICK_SPACING = Math.floor(maxWick); msgs.push('Wick holes moved inward to stay on the floor.'); }
+    if (params.FILL_PORT_D / 2 + params.FILL_WALL > d.r_o * 0.45) { params.FILL_PORT_D = Math.floor(d.r_o * 0.9 - params.FILL_WALL * 2); msgs.push('Watering spout narrowed to fit this pot.'); }
+    if (params.MODE === 'foot') {
+      const maxFoot = 2 * (d.r_o - params.INNER_WALL - 6);
+      if (params.FOOT_D > maxFoot) { params.FOOT_D = Math.floor(maxFoot); msgs.push('Foot narrowed to fit inside the pot.'); }
+      if (params.FOOT_GAP > params.LEDGE_Z - params.FLOOR - 5) { params.FOOT_GAP = Math.max(1, params.LEDGE_Z - params.FLOOR - 5); msgs.push('Foot lowered so it still reaches the water.'); }
+      const ringC = Math.PI * (params.FOOT_D / 2 - params.FOOT_WALL) * 1.1;
+      if (params.FOOT_HOLES * params.FOOT_HOLE_D > ringC) { params.FOOT_HOLES = Math.max(3, Math.floor(ringC / params.FOOT_HOLE_D)); msgs.push('Fewer perforations so they fit the foot.'); }
+    }
+    syncAll();
+    const warn = document.getElementById('warn');
+    warn.style.display = msgs.length ? 'block' : 'none';
+    warn.textContent = msgs.join(' ');
+  }
+
+  /* ---------- three.js scene ---------- */
+  const canvas = document.getElementById('viewport');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.localClippingEnabled = true;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(36, 1, 1, 3000);
+  const key = new THREE.DirectionalLight(0xFFF3DF, 1.0); key.position.set(260, 150, 240);
+  const fill = new THREE.DirectionalLight(0xD8E4E2, 0.3); fill.position.set(-260, 60, -120);
+  const hemi = new THREE.HemisphereLight(0xF6F5EC, 0xADB4A2, 0.55);
+  scene.add(key, fill, hemi, new THREE.AmbientLight(0xF2F1E9, 0.3));
+
+  const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.01);
+  const matOuter = new THREE.MeshStandardMaterial({ color: 0xCFC3AE, roughness: 0.68, metalness: 0.0, side: THREE.DoubleSide });
+  const matInner = new THREE.MeshStandardMaterial({ color: 0x8FA382, roughness: 0.62, metalness: 0.0, side: THREE.DoubleSide });
+
+  // soft contact shadow
+  const shadowTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(64, 64, 8, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(60,66,55,0.30)');
+    grad.addColorStop(1, 'rgba(60,66,55,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  })();
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  scene.add(shadow);
+
+  const pivot = new THREE.Group();
+  scene.add(pivot);
+  const matWater = new THREE.MeshStandardMaterial({
+    color: 0x6FA8B8, transparent: true, opacity: 0.55, roughness: 0.2, metalness: 0.0,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  let meshOuter = null, meshInner = null, meshWater = null;
+  let view = 'together', spin = false;
+  let frameH = 100, frameD = 100;
+
+  function toGeometry(mesh) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.tris), 3));
+    g.computeVertexNormals();
+    g.rotateX(-Math.PI / 2);
+    return g;
+  }
+
+  let outerSTL = null, innerSTL = null, buildTimer = null;
+
+  function build() {
+    sanity();
+    const o = PC.buildOuter(params);
+    const i = params.MODE === 'foot' ? PC.buildInnerFoot(params) : PC.buildInner(params);
+    outerSTL = PC.toBinarySTL(o);
+    innerSTL = PC.toBinarySTL(i);
+    if (meshOuter) { pivot.remove(meshOuter); meshOuter.geometry.dispose(); }
+    if (meshInner) { pivot.remove(meshInner); meshInner.geometry.dispose(); }
+    if (meshWater) { pivot.remove(meshWater); meshWater.geometry.dispose(); }
+    meshOuter = new THREE.Mesh(toGeometry(o), matOuter);
+    meshInner = new THREE.Mesh(toGeometry(i), matInner);
+    const d = PC.derived(params);
+    const wr = Math.max(4, d.LOWER_R - (params.SOLID_RESERVOIR ? 3.6 : 0) - params.RES_FILLET - 0.8);
+    const wh = Math.max(1, params.LEDGE_Z - params.FLOOR - 1.2);
+    meshWater = new THREE.Mesh(new THREE.CylinderGeometry(wr, wr, wh, 96), matWater);
+    meshWater.renderOrder = 2;
+    pivot.add(meshOuter, meshInner, meshWater);
+    layout();
+    updateStats();
+  }
+  function scheduleBuild() { clearTimeout(buildTimer); buildTimer = setTimeout(build, 180); }
+
+  function layout() {
+    const cut = view === 'inside';
+    const d = PC.derived(params);
+    const innerTotalH = params.MODE === 'foot' ? PC.footDepth(params) + d.innerH : d.innerH;
+    const seatZ = params.MODE === 'foot' ? params.LEDGE_Z - PC.footDepth(params) : params.LEDGE_Z;
+    const wh = Math.max(1, params.LEDGE_Z - params.FLOOR - 1.2);
+
+    meshOuter.visible = view !== 'inner';
+    meshInner.visible = view !== 'outer';
+    meshWater.visible = cut;
+
+    if (view === 'inner') {
+      const mid = innerTotalH / 2;
+      meshInner.position.set(0, -mid, 0);
+      shadow.position.set(0, -mid - 0.4, 0);
+      shadow.scale.set(d.r_o * 3.8, d.r_o * 3.8, 1);
+      frameH = innerTotalH; frameD = d.r_o * 2;
+    } else {
+      const mid = params.H / 2;
+      meshOuter.position.set(0, -mid, 0);
+      meshInner.position.set(0, seatZ - mid, 0);
+      meshWater.position.set(0, params.FLOOR + 0.3 + wh / 2 - mid, 0);
+      shadow.position.set(0, -mid - 0.4, 0);
+      shadow.scale.set(params.OUTER_D * 1.9, params.OUTER_D * 1.9, 1);
+      frameH = params.H; frameD = params.OUTER_D;
+    }
+    matOuter.clippingPlanes = cut ? [clipPlane] : null;
+    matInner.clippingPlanes = cut ? [clipPlane] : null;
+    matWater.clippingPlanes = cut ? [clipPlane] : null;
+    applyRot();
+  }
+
+  function updateStats() {
+    const d = PC.derived(params);
+    const rr = d.LOWER_R - (params.SOLID_RESERVOIR ? 3.6 : 0);
+    const resVol = Math.max(0, Math.PI * rr * rr * (params.LEDGE_Z - params.FLOOR) / 1000);
+    document.getElementById('stats').innerHTML =
+      'outer <b>&Oslash;' + params.OUTER_D + ' &times; ' + params.H + '</b> mm<br>' +
+      'inner <b>&Oslash;' + (2 * d.r_o).toFixed(0) + ' &times; ' + d.innerH.toFixed(0) + '</b> mm<br>' +
+      'the well holds <span class="water">&approx;' + Math.round(resVol) + ' ml</span><br>' +
+      refillText(resVol);
+  }
+
+  function refillText(vol) {
+    // per-plant draw when a plant is chosen; otherwise scale with pot size
+    const draw = currentDraw || [params.OUTER_D * 0.15, params.OUTER_D * 0.4];
+    const days = vol / Math.sqrt(draw[0] * draw[1]); // typical, not best-case
+    let phrase;
+    if (days < 4) phrase = 'every few days';
+    else if (days < 10) phrase = 'about once a week';
+    else if (days < 18) phrase = 'every couple of weeks';
+    else phrase = 'every few weeks';
+    return 'refill <b>' + phrase + '</b>';
+  }
+
+  /* ---------- interaction ---------- */
+  let dragging = false, px = 0, py = 0, rotY = 0.5, rotX = 0.33, dist = 1;
+  function applyRot() {
+    pivot.rotation.set(0, rotY, 0);
+    const span = Math.max(frameH * 1.25, frameD * 1.5) * dist;
+    camera.position.set(0, Math.sin(rotX) * span * 1.3, Math.cos(rotX) * span * 1.55);
+    camera.lookAt(0, 0, 0);
+  }
+  canvas.addEventListener('pointerdown', e => { dragging = true; px = e.clientX; py = e.clientY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    rotY += (e.clientX - px) * 0.008;
+    rotX = Math.max(-0.15, Math.min(1.3, rotX + (e.clientY - py) * 0.006));
+    px = e.clientX; py = e.clientY;
+    applyRot();
+  });
+  canvas.addEventListener('pointerup', () => dragging = false);
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    dist = Math.max(0.5, Math.min(2.5, dist * (1 + e.deltaY * 0.001)));
+    applyRot();
+  }, { passive: false });
+
+  function bindToggle(id, fn) {
+    const el = document.getElementById(id);
+    el.addEventListener('click', () => { const on = el.classList.toggle('on'); fn(on); });
+  }
+  const viewSeg = document.getElementById('viewSeg');
+  viewSeg.addEventListener('click', e => {
+    const el = e.target.closest('.seg');
+    if (!el) return;
+    viewSeg.querySelectorAll('.seg').forEach(x => x.classList.toggle('on', x === el));
+    view = el.dataset.view;
+    layout();
+  });
+  bindToggle('tgSpin', on => { spin = on; });
+
+  let thanked = false;
+  function showThanks() {
+    if (thanked) return;
+    thanked = true;
+    const el = document.getElementById('thanks');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 9000);
+  }
+  function download(buf, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
+    a.download = name;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    showThanks();
+    const warn = document.getElementById('warn');
+    if (window.self !== window.top) {
+      warn.style.display = 'block';
+      warn.textContent = 'If no file appeared: this preview blocks downloads. Save this page and open it directly in your browser.';
+      setTimeout(() => { warn.style.display = 'none'; }, 6000);
+    }
+  }
+  document.getElementById('dl3mf').addEventListener('click', () => download(PC.buildProject3MF(params).buffer, 'wellpot.3mf'));
+  document.getElementById('dlOuter').addEventListener('click', () => outerSTL && download(outerSTL, 'wellpot_outer.stl'));
+  document.getElementById('dlInner').addEventListener('click', () => innerSTL && download(innerSTL, 'wellpot_inner.stl'));
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    renderer.setSize(r.width, r.height, false);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    camera.aspect = r.width / r.height;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  new ResizeObserver(() => { resize(); }).observe(document.getElementById('stage'));
+
+  function tick() {
+    if (spin && !dragging) { rotY += 0.004; applyRot(); }
+    renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  }
+
+  applyPlant(PLANTS.find(x => x.n === 'Medium'));
+  resize();
+  build();
+  tick();
+})();
+</script>
+</body>
+</html>
