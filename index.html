@@ -600,9 +600,14 @@ function buildOuter(p) {
   const SOLID_T = 3.6; // extra inward wall thickness, ~4 loops at 0.45mm+
   const resInnerR = t => (p.SOLID_RESERVOIR && !inNotchRamp(t))
     ? Math.min(baseInnerR(t), d.LOWER_R - SOLID_T) : baseInnerR(t);
+  // Keep the reservoir floor a clean circle: the disk sits at one constant
+  // radius, and the segment/gap scalloping fades in across the corner fillet so
+  // it only shows up on the wall just above the floor, never on the floor itself.
+  const rFloor = d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0); // = seat/segment radius
   const filletR = (t, u) => { // u = z - FLOOR in [0,F]
     const drop = F - Math.sqrt(Math.max(0, F*F - (F-u)*(F-u)));
-    return resInnerR(t) - drop;
+    const base = rFloor + (resInnerR(t) - rFloor) * (F > 0 ? u / F : 1);
+    return base - drop;
   };
   const irows = [];
   const KF = 6;
