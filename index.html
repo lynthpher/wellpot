@@ -1407,7 +1407,7 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
   }
 
   /* ---------- interaction ---------- */
-  let dragging = false, rotY = 0.5, rotX = 0.33, dist = 1;
+  let dragging = false, rotY = 0.5, rotX = 0.33, dist = 1.32;
   // active pointers: one finger (or mouse) rotates, two fingers pinch-zoom
   const pointers = new Map();          // pointerId -> {x, y}
   let pinchSpread = 0, pinchZoom = 1;  // finger gap + zoom captured at pinch start
