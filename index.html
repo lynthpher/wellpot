@@ -508,6 +508,10 @@ function circlePoly(c, r, n, ccw) {
 
 /* ---------------- OUTER POT ---------------- */
 
+// Half-width (rad) of each of the 3 reservoir-wall seat segments. Small = big
+// gaps = maximum water; just large enough to hold the inner pot up.
+const RES_SEG_HALF = 0.20;   // ~23deg segments
+
 function buildOuter(p) {
   const d = derived(p);
   const m = Mesh();
@@ -541,17 +545,20 @@ function buildOuter(p) {
   // The wall opens to the bore at each gap; the segments between them double as
   // the seat the inner pot rests on.
   const GAP_C = [Math.PI/2, Math.PI/2 + 2*Math.PI/3, Math.PI/2 + 4*Math.PI/3];
+  // Wide gaps, small seat segments: the wall opens to the bore everywhere
+  // except a small arc (~RES_SEG_HALF) around each of the 3 segment midpoints.
+  const GAP_HALF = Math.max(notchHalf, Math.PI/3 - RAMP - RES_SEG_HALF);
   const gapDist = t => {   // angular distance to the nearest gap center
     let best = Math.PI;
     for (const c of GAP_C) { let a = Math.abs(t - c); if (a > Math.PI) a = 2*Math.PI - a; best = Math.min(best, a); }
     return best;
   };
-  const inNotchRamp = t => gapDist(t) <= notchHalf + RAMP;
+  const inNotchRamp = t => gapDist(t) <= GAP_HALF + RAMP;
   const baseInnerR = t => {
     const a = gapDist(t);
-    if (a <= notchHalf) return d.BORE_R;
-    if (a >= notchHalf + RAMP) return d.LOWER_R;
-    const s = 0.5 + 0.5*Math.cos(Math.PI * (a - notchHalf) / RAMP);
+    if (a <= GAP_HALF) return d.BORE_R;
+    if (a >= GAP_HALF + RAMP) return d.LOWER_R;
+    const s = 0.5 + 0.5*Math.cos(Math.PI * (a - GAP_HALF) / RAMP);
     return d.LOWER_R + (d.BORE_R - d.LOWER_R) * s;
   };
 
@@ -659,7 +666,7 @@ function buildOuter(p) {
     // double-hull reservoir wall: one solid-wall void per segment between the
     // 3 fill-port gaps
     if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
-      const half = notchHalf + RAMP + 0.06;
+      const half = GAP_HALF + RAMP + 0.06;
       for (let k = 0; k < GAP_C.length; k++) {
         const a0 = GAP_C[k] + half;
         const a1 = GAP_C[(k + 1) % GAP_C.length] + (k === GAP_C.length - 1 ? 2 * Math.PI : 0) - half;
@@ -795,9 +802,13 @@ function footGeom(p, d) {
 function footWater(p) {
   const d = derived(p);
   const g = footGeom(p, d);
-  const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);
+  const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);        // reservoir radius at the seat segments
+  // the wall is open to the bore across the 3 gaps and only at rr on the small
+  // seat segments, so most of the reservoir is as wide as the bore
+  const segFrac = Math.min(1, 3 * 2 * RES_SEG_HALF / (2 * Math.PI));
+  const effR2 = (1 - segFrac) * d.BORE_R * d.BORE_R + segFrac * rr * rr;
   const rTop = g.frBot + g.FD;                                  // funnel radius at the reservoir top
-  const above = Math.PI * rr * rr * g.FD / 1000;
+  const above = Math.PI * effR2 * g.FD / 1000;
   const funnel = (Math.PI * g.FD / 3) * (rTop * rTop + rTop * g.frBot + g.frBot * g.frBot) / 1000;
   return Math.max(0, above - funnel);
 }
