@@ -341,7 +341,7 @@ function defaultParams() {
   return {
     OUTER_D: 120, H: 110, WALL: 2.4, FLOOR: 5, SOLID_RESERVOIR: true, LATTICE: true,
     RIB_COUNT: 110, RIB_DEPTH: 1.2, BASE_BAND_H: 14, TOP_BAND_H: 6,
-    LEDGE_Z: 30, LEDGE_W: 0, RES_FILLET: 5,
+    LEDGE_Z: 30, LEDGE_W: 1.5, RES_FILLET: 5,
     CLEARANCE: 0.4, INNER_WALL: 2, INNER_FLOOR: 2.5, RIM_DROP: 2,
     WICK_HOLE_D: 8, WICK_SPACING: 30,
     FILL_PORT_D: 26, FILL_WALL: 2, FILL_BLEND: 12,
@@ -508,20 +508,6 @@ function circlePoly(c, r, n, ccw) {
 
 /* ---------------- OUTER POT ---------------- */
 
-/* The conical ledge is kept only at 3 equidistant arcs and cut away between
-   them, so the inner cone rests on 3 remaining spots of the existing ledge.
-   No inward bumps — the arcs are the original seat; the gaps are plain wall. */
-const SEAT_ARC_HALF = 0.30;                                     // rad, angular half-width of each kept arc
-const SEAT_ARC_C = [Math.PI/6, 5*Math.PI/6, 3*Math.PI/2];       // 3 arc centers, clear of the fill notch
-function seatArcMask(t) {                                       // 1 on a kept ledge arc, 0 in the cut gaps
-  let m = 0;
-  for (const c of SEAT_ARC_C) {
-    const a = Math.abs((((t - c) % (2*Math.PI)) + 3*Math.PI) % (2*Math.PI) - Math.PI);
-    if (a < SEAT_ARC_HALF) m = Math.max(m, 0.5 + 0.5*Math.cos(Math.PI * a / SEAT_ARC_HALF));
-  }
-  return m;
-}
-
 function buildOuter(p) {
   const d = derived(p);
   const m = Mesh();
@@ -613,17 +599,12 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // Cut the reservoir wall away between 3 equidistant arcs, leaving 3 standing
-  // posts that rise to the ledge — the inner cone rests on the 3 post tops.
-  // Below the cut the wall is whole; above it, the gaps open straight out to
-  // the bore. (Leak-proofing verified fine by the user.) Fill notch stays open.
-  const seatRise = Math.max(0, d.BORE_R - (d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0)));
-  const CUT_Z = p.FLOOR + F + (p.LEDGE_Z - p.FLOOR - F) * 0.4;   // wall whole below; cut in the gaps above
-  const postR = t => d.BORE_R - (d.BORE_R - resInnerR(t)) * seatArcMask(t);  // arcs keep the wall; gaps at bore
-  irows.push(ring(resInnerR, CUT_Z));                          // reservoir wall up to the cut
-  irows.push(ring(postR, CUT_Z));                              // gaps cut out to the bore; posts keep the wall
-  irows.push(ring(postR, p.LEDGE_Z));                          // 3 posts rise to the ledge; gaps are open bore
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));      // small seat on each of the 3 post tops
+  // 45deg conical seat (was a flat ledge step) so the inner pot's matching
+  // cone rests on it with no overhang. Rises from the reservoir wall out to
+  // the upper bore; vertical at the fill-port notch where the two coincide.
+  const seatRise = Math.max(0, d.BORE_R - (d.LOWER_R - SOLID_T));
+  irows.push(ring(resInnerR, p.LEDGE_Z));
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // conical seat
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
@@ -796,19 +777,19 @@ function footDepth(p) {
 function footGeom(p, d) {
   d = d || derived(p);
   const FD = footDepth(p);
-  const resInner = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);   // reservoir / seat wall radius
-  const seatRise = Math.max(0, d.BORE_R - resInner);           // the conical seat rise
-  const coneH = FD + seatRise;                                 // tip -> seat top: one 45deg cone
-  const frBot = Math.max(8, d.r_o - coneH);                    // tip radius (45deg run = coneH)
+  const resInner = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);   // reservoir cavity wall
+  const seatRise = Math.max(0, d.BORE_R - resInner);            // 45deg conical seat height
+  const coneH = FD + seatRise;                                  // tip -> seat top: one 45deg cone
+  const frBot = Math.max(8, d.r_o - coneH);                     // tip radius (45deg run = coneH)
   return { FD, resInner, seatRise, coneH, frBot };
 }
-/* Usable reservoir water in soil-foot mode: reservoir above the foot tip,
-   minus the funnel volume the foot occupies. */
+/* Usable reservoir water in soil-foot mode: the water above the foot tip,
+   minus the funnel volume the foot occupies down in the reservoir. */
 function footWater(p) {
   const d = derived(p);
   const g = footGeom(p, d);
-  const rr = g.resInner;
-  const rTop = g.frBot + g.FD;
+  const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);
+  const rTop = g.frBot + g.FD;                                  // funnel radius at the reservoir top
   const above = Math.PI * rr * rr * g.FD / 1000;
   const funnel = (Math.PI * g.FD / 3) * (rTop * rTop + rTop * g.frBot + g.frBot * g.frBot) / 1000;
   return Math.max(0, above - funnel);
@@ -1313,7 +1294,7 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
   const adv = det.querySelector('.inner');
   adv.appendChild(paramRow('WALL', 'Outer wall thickness', 1.6, 4, 0.1, 'mm'));
   adv.appendChild(paramRow('FLOOR', 'Base thickness', 2, 8, 0.5, 'mm'));
-  adv.appendChild(paramRow('LEDGE_W', 'Ledge inset', 0, 8, 0.5, 'mm'));
+  adv.appendChild(paramRow('LEDGE_W', 'Ledge width', 1, 8, 0.5, 'mm'));
   adv.appendChild(paramRow('RES_FILLET', 'Base corner round-over', 0, 10, 0.5, 'mm'));
   adv.appendChild(paramRow('CLEARANCE', 'Fit clearance', 0.2, 1, 0.05, 'mm'));
   adv.appendChild(paramRow('INNER_WALL', 'Inner pot wall', 1.2, 4, 0.1, 'mm'));
