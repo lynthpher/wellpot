@@ -1163,9 +1163,10 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
 
   // With the flared foot, drop the tip a couple mm deeper (min 2 mm clearance)
   // so it reaches lower water — reclaiming the dead pool the old tip sat above.
-  // Dry-spell presets keep their taller gap, just reduced.
+  // Leave the dry-spell presets (tall gap) alone: Mediterranean herbs want the
+  // foot to sit high so the soil actually dries out between drinks.
   for (const pl of PLANTS) {
-    if (pl.p.FOOT_GAP !== undefined) pl.p.FOOT_GAP = Math.max(2, pl.p.FOOT_GAP - 2);
+    if (pl.p.FOOT_GAP !== undefined && pl.p.FOOT_GAP <= 4) pl.p.FOOT_GAP = Math.max(2, pl.p.FOOT_GAP - 2);
   }
 
   /* ----- plant picker ----- */
