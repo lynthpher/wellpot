@@ -599,8 +599,12 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
+  // 45deg conical seat (was a flat ledge step) so the inner pot's matching
+  // cone rests on it with no overhang. Rises from the reservoir wall out to
+  // the upper bore; vertical at the fill-port notch where the two coincide.
+  const seatRise = Math.max(0, d.BORE_R - (d.LOWER_R - SOLID_T));
   irows.push(ring(resInnerR, p.LEDGE_Z));
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z));      // ledge step
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // conical seat
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
@@ -765,75 +769,74 @@ function buildInner(p) {
 function footDepth(p) {
   return Math.max(2, p.LEDGE_Z - p.FLOOR - p.FOOT_GAP);
 }
-/* Flared-foot geometry (single source of truth). The funnel widens from a
-   small perforated tip (frBot) up toward the reservoir bore (frTop), so its
-   underside is a printable slope instead of a flat shelf. frTop is capped to
-   the reservoir cavity so it drops in clear; frBot is held so the wall never
-   exceeds 45deg from vertical (its run can't beat the foot depth FD) — that's
-   what makes it print without supports. Only a small floor lip is left, which
-   bridges. */
-function footGeom(p, d, b) {
-  d = d || derived(p); b = b || innerBoundaries(p);
+/* Conical-foot geometry (single source of truth). The foot is one 45deg cone
+   from a small perforated tip (frBot) up to the full rim boundary at the seat
+   (coneH tall = foot depth FD + the seat's own rise). Because it climbs at
+   45deg the whole way and seats on the outer pot's matching conical ledge,
+   there is no flat floor lip left to overhang. */
+function footGeom(p, d) {
+  d = d || derived(p);
   const FD = footDepth(p);
   const resInner = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);   // reservoir cavity wall
-  const frTop = Math.max(10, Math.min(b.rCav - 6, resInner - 1.5));
-  let frBot = Math.min(p.FOOT_D / 2, frTop - 3);
-  frBot = Math.max(frBot, frTop - FD, 8);
-  return { FD, frTop, frBot };
+  const seatRise = Math.max(0, d.BORE_R - resInner);            // 45deg conical seat height
+  const coneH = FD + seatRise;                                  // tip -> seat top: one 45deg cone
+  const frBot = Math.max(8, d.r_o - coneH);                     // tip radius (45deg run = coneH)
+  return { FD, resInner, seatRise, coneH, frBot };
 }
-/* Usable reservoir water in soil-foot mode: the water sitting above the foot
-   tip, minus the funnel volume the foot occupies. */
+/* Usable reservoir water in soil-foot mode: the water above the foot tip,
+   minus the funnel volume the foot occupies down in the reservoir. */
 function footWater(p) {
   const d = derived(p);
-  const { FD, frTop, frBot } = footGeom(p, d);
+  const g = footGeom(p, d);
   const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);
-  const above = Math.PI * rr * rr * FD / 1000;
-  const funnel = (Math.PI * FD / 3) * (frTop * frTop + frTop * frBot + frBot * frBot) / 1000;
+  const rTop = g.frBot + g.FD;                                  // funnel radius at the reservoir top
+  const above = Math.PI * rr * rr * g.FD / 1000;
+  const funnel = (Math.PI * g.FD / 3) * (rTop * rTop + rTop * g.frBot + g.frBot * g.frBot) / 1000;
   return Math.max(0, above - funnel);
 }
 function buildInnerFoot(p) {
   const d = derived(p);
   const m = Mesh();
-  const h = d.innerH;
   const b = innerBoundaries(p);
   const fw = p.FOOT_WALL;
-
-  // flared (funnel) foot — prints support-free (geometry in footGeom)
-  const { FD, frTop, frBot } = footGeom(p, d, b);
-  const fiTop = Math.max(6, frTop - fw);
+  const { FD, seatRise, coneH, frBot } = footGeom(p, d);
   const fiBot = Math.max(4, frBot - fw);
+  const rimZ = FD + d.innerH;           // total height and seat position are unchanged
+
+  // Continuous conical foot: the whole outer surface runs as one 45deg cone
+  // from a small perforated tip up to the full (notched) rim boundary at the
+  // seat, then vertical. It seats on the outer pot's matching 45deg ledge, so
+  // there is no flat floor lip to overhang. toTip() shrinks a boundary toward
+  // the axis (keeping its point count and its fill-port notch, which just
+  // fades out toward the tip) so the cone morphs cleanly.
+  const toTip = (poly, r) => poly.map(pt => {
+    const l = Math.hypot(pt[0], pt[1]) || 1;
+    return [pt[0] * r / l, pt[1] * r / l];
+  });
+  const outerTip = toTip(b.outer, frBot);        // CCW, tip radius
+  const holeTip = toTip(b.holeCCW, fiBot);       // CCW, inner tip radius
 
   // perforation ring in the foot tip
   const n = Math.max(3, Math.round(p.FOOT_HOLES));
   const hr = p.FOOT_HOLE_D / 2;
-  const ringR = Math.min(Math.max(hr + 1, fiBot * 0.55), fiBot - hr - 1);
+  const ringR = Math.min(Math.max(hr + 1, fiBot * 0.55), Math.max(hr + 1, fiBot - hr - 1));
   const perfs = [];
   for (let k = 0; k < n; k++) {
     const a = 2 * Math.PI * k / n;
     perfs.push(circlePoly([ringR * Math.cos(a), ringR * Math.sin(a)], hr, 32, false));
   }
 
-  const Ob = circlePoly([0, 0], frBot, 96, true);   // outer tip (CCW)
-  const Ot = circlePoly([0, 0], frTop, 96, true);   // outer top
-  const OtCW = Ot.slice().reverse();
-  const Ib = circlePoly([0, 0], fiBot, 96, true);   // inner tip
-  const IbCW = Ib.slice().reverse();
-  const It = circlePoly([0, 0], fiTop, 96, true);   // inner top
-  const ItCW = It.slice().reverse();
-
   // faces
-  facePolyHoles(m, Ob, perfs, 0, false);                          // foot tip (bottom)
-  facePolyHoles(m, Ib, perfs, p.INNER_FLOOR, true);               // inside the tip
-  facePolyHoles(m, b.outer, [OtCW], FD, false);                   // floor lip underside (bridges)
-  facePolyHoles(m, b.holeCCW, [ItCW], FD + p.INNER_FLOOR, true);  // soil floor
-  facePolyHoles(m, b.outer, [b.hole], FD + h, true);              // rim
+  facePolyHoles(m, outerTip, perfs, 0, false);                   // foot tip (bottom)
+  facePolyHoles(m, holeTip, perfs, p.INNER_FLOOR, true);         // inside the tip
+  facePolyHoles(m, b.outer, [b.hole], rimZ, true);               // rim
 
-  // walls
-  stripRings(m, lift(Ob, 0), lift(Ot, FD), false);                               // foot outside (cone)
-  stripRings(m, lift(IbCW, p.INNER_FLOOR), lift(ItCW, FD + p.INNER_FLOOR), false); // foot inside (cone)
-  for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, p.INNER_FLOOR), false);    // perf tubes
-  stripRings(m, lift(b.outer, FD), lift(b.outer, FD + h), false);                 // pot outside + channel
-  stripRings(m, lift(b.holeCCW, FD + p.INNER_FLOOR), lift(b.holeCCW, FD + h), true); // cavity wall
+  // walls — one continuous cone to the seat, then a vertical body
+  stripRings(m, lift(outerTip, 0), lift(b.outer, coneH), false);            // outer cone (tip -> seat)
+  stripRings(m, lift(b.outer, coneH), lift(b.outer, rimZ), false);          // outer body
+  stripRings(m, lift(holeTip, p.INNER_FLOOR), lift(b.holeCCW, coneH), true); // inner funnel
+  stripRings(m, lift(b.holeCCW, coneH), lift(b.holeCCW, rimZ), true);        // inner body
+  for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, p.INNER_FLOOR), false); // perf tubes
   return m;
 }
 
