@@ -540,8 +540,9 @@ function buildOuter(p) {
     }
     return d.R_mean + d.AMP * Math.cos(u); // soft sine
   };
-  const RAMP = 0.30; // rad — eases each post into the gap over a wide arc so the
-                     // post's side "cheeks" read as rounded shoulders, not flats
+  const RAMP = 0.04; // rad — keep this TIGHT: the round bore wall holds its curve
+                     // right up to each post, then steps in quickly. A wide ramp
+                     // necks the tube inward and makes the wall look flattened.
   // Three equidistant fill-port gaps in the reservoir wall (one is the spout).
   // The wall opens to the bore at each gap; the segments between them double as
   // the seat the inner pot rests on.
