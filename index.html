@@ -600,14 +600,14 @@ function buildOuter(p) {
   const SOLID_T = 3.6; // extra inward wall thickness, ~4 loops at 0.45mm+
   const resInnerR = t => (p.SOLID_RESERVOIR && !inNotchRamp(t))
     ? Math.min(baseInnerR(t), d.LOWER_R - SOLID_T) : baseInnerR(t);
-  // Keep the reservoir floor a clean circle: the disk sits at one constant
-  // radius, and the segment/gap scalloping fades in across the corner fillet so
-  // it only shows up on the wall just above the floor, never on the floor itself.
-  const rFloor = d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0); // = seat/segment radius
+  // Round floor + clean cylindrical wall. The floor disk and the whole
+  // reservoir wall sit at the full bore, so the wall reads as one smooth
+  // cylinder with no flats. The three seat segments pinch inward only in a
+  // short zone just below the rim -- the single spot the inner pot rests on --
+  // so the walls no longer flatten down their full height.
   const filletR = (t, u) => { // u = z - FLOOR in [0,F]
     const drop = F - Math.sqrt(Math.max(0, F*F - (F-u)*(F-u)));
-    const base = rFloor + (resInnerR(t) - rFloor) * (F > 0 ? u / F : 1);
-    return base - drop;
+    return d.BORE_R - drop;
   };
   const irows = [];
   const KF = 6;
@@ -615,12 +615,19 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // 45deg conical seat (was a flat ledge step) so the inner pot's matching
-  // cone rests on it with no overhang. Rises from the reservoir wall out to
-  // the upper bore; vertical at the fill-port notch where the two coincide.
+  // full-bore wall up to the seat zone; then the segments ease inward to the
+  // seat radius over a ~45deg gusset while the gaps stay at the bore, forming
+  // the waist the inner pot's cone rests on. This is the only place it narrows.
   const seatRise = Math.max(0, d.BORE_R - (d.LOWER_R - SOLID_T));
-  irows.push(ring(resInnerR, p.LEDGE_Z));
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // conical seat
+  const SEAT_H = Math.min(Math.max(2, p.LEDGE_Z - p.FLOOR - F - 0.5), Math.max(6, seatRise + 2));
+  const zSeat0 = p.LEDGE_Z - SEAT_H;
+  irows.push(ring(() => d.BORE_R, zSeat0));
+  const KS = 4;
+  for (let k = 1; k <= KS; k++) {
+    const z = zSeat0 + SEAT_H * k / KS, frac = k / KS;
+    irows.push(ring(t => d.BORE_R + (resInnerR(t) - d.BORE_R) * frac, z));
+  }
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // seat flares back out
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
@@ -668,16 +675,9 @@ function buildOuter(p) {
         ringVoid(r, r + 2.0, SK, p.FLOOR - SK);
       }
     }
-    // double-hull reservoir wall: one solid-wall void per segment between the
-    // 3 fill-port gaps
-    if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
-      const half = GAP_HALF + RAMP + 0.06;
-      for (let k = 0; k < GAP_C.length; k++) {
-        const a0 = GAP_C[k] + half;
-        const a1 = GAP_C[(k + 1) % GAP_C.length] + (k === GAP_C.length - 1 ? 2 * Math.PI : 0) - half;
-        ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0, p.FLOOR + 1.4, p.LEDGE_Z - 1.4, a0, a1);
-      }
-    }
+    // (The reservoir wall is now a uniform full-bore cylinder -- the same
+    // construction the whole way around as the fill-port gaps -- so there is no
+    // separate thick segment wall to double-hull.)
   }
 
   // --- caps ---
@@ -807,11 +807,9 @@ function footGeom(p, d) {
 function footWater(p) {
   const d = derived(p);
   const g = footGeom(p, d);
-  const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);        // reservoir radius at the seat segments
-  // the wall is open to the bore across the 3 gaps and only at rr on the small
-  // seat segments, so most of the reservoir is as wide as the bore
-  const segFrac = Math.min(1, 3 * 2 * RES_SEG_HALF / (2 * Math.PI));
-  const effR2 = (1 - segFrac) * d.BORE_R * d.BORE_R + segFrac * rr * rr;
+  // the reservoir wall is a full-bore cylinder; the seat segments pinch in only
+  // for a short zone up at the rim, so essentially the whole depth is bore-wide
+  const effR2 = d.BORE_R * d.BORE_R;
   const rTop = g.frBot + g.FD;                                  // funnel radius at the reservoir top
   const above = Math.PI * effR2 * g.FD / 1000;
   const funnel = (Math.PI * g.FD / 3) * (rTop * rTop + rTop * g.frBot + g.frBot * g.frBot) / 1000;
