@@ -611,17 +611,25 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // clean full-bore cylinder up to the lip zone
-  const LIP_H = Math.min(Math.max(2, p.LEDGE_Z - p.FLOOR - F - 0.5), Math.max(7, seatRise + 2));
+  // clean full-bore cylinder up to the lip zone, then a smoothly rounded seat
+  // groove: the wall eases inward to the lip and back out with no sharp root or
+  // waist corner -- so the pot's load spreads over a ring (no stress riser) and
+  // the internal valley prints clean. The neck stays under ~40deg from vertical
+  // so it needs no supports.
+  const LIP_H = Math.min(Math.max(2, p.LEDGE_Z - p.FLOOR - F - 0.5), Math.max(9, seatRise * 1.9));
   const zLip0 = p.LEDGE_Z - LIP_H;
   irows.push(ring(() => d.BORE_R, zLip0));
-  // neck the rim inward to the continuous lip (bore -> lipR)
-  const KL = 4;
-  for (let k = 1; k <= KL; k++) {
-    const z = zLip0 + LIP_H * k / KL, fr = k / KL;
-    irows.push(ring(t => d.BORE_R + (lipR(t) - d.BORE_R) * fr, z));
+  const smooth = t => t * t * (3 - 2 * t);
+  const KN = 6;                                   // neck in: bore -> lip (rounds the root + waist)
+  for (let k = 1; k <= KN; k++) {
+    const s = smooth(k / KN), z = zLip0 + LIP_H * k / KN;
+    irows.push(ring(t => d.BORE_R + (lipR(t) - d.BORE_R) * s, z));
   }
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // seat flares back out to the bore
+  const KU = 4;                                   // flare out: lip -> bore (up-facing, rounded)
+  for (let k = 1; k <= KU; k++) {
+    const s = smooth(k / KU), z = p.LEDGE_Z + seatRise * k / KU;
+    irows.push(ring(t => lipR(t) + (d.BORE_R - lipR(t)) * s, z));
+  }
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
