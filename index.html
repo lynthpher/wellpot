@@ -614,16 +614,23 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // 3-tab seat. The reservoir wall stays uniform (leak-proof intact); above it,
-  // each tab dips inward at 45deg to a narrow seat the inner cone rests on,
-  // while the gaps run near-straight up to the bore. Fill notch stays open.
+  // Only 3 equidistant tabs form the seat — the gaps have no ledge, just a
+  // short step up to the bore and then plain vertical wall. Each tab dips
+  // inward and rises back to the bore, making a small shelf the inner cone
+  // rests on. Reservoir wall + double-hull stay uniform (leak-proof). The
+  // fill notch stays open (full bore).
   const rGap = d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0);
   const rTab = Math.max(10, rGap - SEAT_TAB_DEPTH);
-  const rampH = rGap - rTab;                                       // 45deg tab underside
-  const seatR = t => inNotchRamp(t) ? baseInnerR(t) : (rGap - seatTabInset(t));
+  const STEP = d.BORE_R - rGap;                                    // reservoir-top step (leak-proof wall)
+  const tabRise = d.BORE_R - rTab;
+  const lipR = t => {
+    if (inNotchRamp(t)) return baseInnerR(t);                     // fill channel stays open
+    const frac = seatTabInset(t) / SEAT_TAB_DEPTH;                // 0 in gaps, 1 at a tab center
+    return d.BORE_R - (d.BORE_R - rTab) * frac;                   // gaps step out to bore; tabs dip to rTab
+  };
   irows.push(ring(resInnerR, p.LEDGE_Z));                         // reservoir wall top
-  irows.push(ring(seatR, p.LEDGE_Z + rampH));                     // tab tips (inward at the 3 tabs)
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + rampH + (d.BORE_R - rTab))); // seat rises to the bore
+  irows.push(ring(lipR, p.LEDGE_Z + STEP));                       // gaps -> bore; tabs -> rTab
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + STEP + tabRise));   // tabs rise to bore; gaps already vertical
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
@@ -798,8 +805,7 @@ function footGeom(p, d) {
   const FD = footDepth(p);
   const rGap = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);       // wide reservoir wall (in the gaps)
   const rTab = Math.max(10, rGap - SEAT_TAB_DEPTH);            // the 3 tabs the foot rests on
-  const rampH = rGap - rTab;                                   // tab underside (45deg)
-  const seatRise = (d.BORE_R - rTab) + rampH;                  // cone from the tab up to the bore, + ramp
+  const seatRise = (d.BORE_R - rTab) + (d.BORE_R - rGap);      // tab rise + the reservoir-top step
   const coneH = FD + seatRise;                                 // tip -> seat top: one 45deg cone
   const frBot = Math.max(8, d.r_o - coneH);                    // tip radius (45deg run = coneH)
   return { FD, rGap, rTab, seatRise, coneH, frBot };
