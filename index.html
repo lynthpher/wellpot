@@ -829,14 +829,29 @@ function buildInnerFoot(p) {
   // faces
   facePolyHoles(m, outerTip, perfs, 0, false);                   // foot tip (bottom)
   facePolyHoles(m, holeTip, perfs, p.INNER_FLOOR, true);         // inside the tip
-  facePolyHoles(m, b.outer, [b.hole], rimZ, true);               // rim
 
   // walls — one continuous cone to the seat, then a vertical body
   stripRings(m, lift(outerTip, 0), lift(b.outer, coneH), false);            // outer cone (tip -> seat)
-  stripRings(m, lift(b.outer, coneH), lift(b.outer, rimZ), false);          // outer body
   stripRings(m, lift(holeTip, p.INNER_FLOOR), lift(b.holeCCW, coneH), true); // inner funnel
-  stripRings(m, lift(b.holeCCW, coneH), lift(b.holeCCW, rimZ), true);        // inner body
+  stripRings(m, lift(b.holeCCW, coneH), lift(b.holeCCW, rimZ), true);        // inner body (to rim)
   for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, p.INNER_FLOOR), false); // perf tubes
+
+  // Rounded pour lip: roll the outer top edge over a small bullnose so the
+  // fill spout (and the whole rim) sheds water cleanly instead of catching on
+  // a sharp corner and dribbling.
+  const RND = Math.min(1.2, (d.r_o - b.rCav) * 0.9);
+  const scaleXY = (poly, f) => poly.map(pt => [pt[0] * f, pt[1] * f]);
+  stripRings(m, lift(b.outer, coneH), lift(b.outer, rimZ - RND), false);    // outer body up to the lip
+  let lipPrev = b.outer, lipZ = rimZ - RND;
+  const LIPN = 3;
+  for (let k = 1; k <= LIPN; k++) {
+    const s = k / LIPN;
+    const inset = RND - Math.sqrt(Math.max(0, RND * RND - s * s * RND * RND));
+    const cur = scaleXY(b.outer, (d.r_o - inset) / d.r_o);
+    stripRings(m, lift(lipPrev, lipZ), lift(cur, rimZ - RND + s * RND), false);
+    lipPrev = cur; lipZ = rimZ - RND + s * RND;
+  }
+  facePolyHoles(m, lipPrev, [b.hole], rimZ, true);                          // flat top of the lip
   return m;
 }
 
