@@ -537,14 +537,18 @@ function buildOuter(p) {
     return d.R_mean + d.AMP * Math.cos(u); // soft sine
   };
   const RAMP = 0.12; // rad — eases the notch sides
-  const inNotchRamp = t => {
-    let a = Math.abs(t - Math.PI/2);
-    if (a > Math.PI) a = 2*Math.PI - a;
-    return a <= notchHalf + RAMP;
+  // Three equidistant fill-port gaps in the reservoir wall (one is the spout).
+  // The wall opens to the bore at each gap; the segments between them double as
+  // the seat the inner pot rests on.
+  const GAP_C = [Math.PI/2, Math.PI/2 + 2*Math.PI/3, Math.PI/2 + 4*Math.PI/3];
+  const gapDist = t => {   // angular distance to the nearest gap center
+    let best = Math.PI;
+    for (const c of GAP_C) { let a = Math.abs(t - c); if (a > Math.PI) a = 2*Math.PI - a; best = Math.min(best, a); }
+    return best;
   };
+  const inNotchRamp = t => gapDist(t) <= notchHalf + RAMP;
   const baseInnerR = t => {
-    let a = Math.abs(t - Math.PI/2);
-    if (a > Math.PI) a = 2*Math.PI - a;
+    const a = gapDist(t);
     if (a <= notchHalf) return d.BORE_R;
     if (a >= notchHalf + RAMP) return d.LOWER_R;
     const s = 0.5 + 0.5*Math.cos(Math.PI * (a - notchHalf) / RAMP);
@@ -652,12 +656,15 @@ function buildOuter(p) {
         ringVoid(r, r + 2.0, SK, p.FLOOR - SK);
       }
     }
-    // double-hull reservoir wall: annular gap, skipping the fill-port notch
+    // double-hull reservoir wall: one solid-wall void per segment between the
+    // 3 fill-port gaps
     if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
       const half = notchHalf + RAMP + 0.06;
-      ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0,
-               p.FLOOR + 1.4, p.LEDGE_Z - 1.4,
-               Math.PI / 2 + half, Math.PI / 2 + 2 * Math.PI - half);
+      for (let k = 0; k < GAP_C.length; k++) {
+        const a0 = GAP_C[k] + half;
+        const a1 = GAP_C[(k + 1) % GAP_C.length] + (k === GAP_C.length - 1 ? 2 * Math.PI : 0) - half;
+        ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0, p.FLOOR + 1.4, p.LEDGE_Z - 1.4, a0, a1);
+      }
     }
   }
 
