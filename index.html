@@ -765,41 +765,72 @@ function buildInner(p) {
 function footDepth(p) {
   return Math.max(2, p.LEDGE_Z - p.FLOOR - p.FOOT_GAP);
 }
+/* Flared-foot geometry (single source of truth). The funnel widens from a
+   small perforated tip (frBot) up toward the reservoir bore (frTop), so its
+   underside is a printable slope instead of a flat shelf. frTop is capped to
+   the reservoir cavity so it drops in clear; frBot is held so the wall never
+   exceeds 45deg from vertical (its run can't beat the foot depth FD) — that's
+   what makes it print without supports. Only a small floor lip is left, which
+   bridges. */
+function footGeom(p, d, b) {
+  d = d || derived(p); b = b || innerBoundaries(p);
+  const FD = footDepth(p);
+  const resInner = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);   // reservoir cavity wall
+  const frTop = Math.max(10, Math.min(b.rCav - 6, resInner - 1.5));
+  let frBot = Math.min(p.FOOT_D / 2, frTop - 3);
+  frBot = Math.max(frBot, frTop - FD, 8);
+  return { FD, frTop, frBot };
+}
+/* Usable reservoir water in soil-foot mode: the water sitting above the foot
+   tip, minus the funnel volume the foot occupies. */
+function footWater(p) {
+  const d = derived(p);
+  const { FD, frTop, frBot } = footGeom(p, d);
+  const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);
+  const above = Math.PI * rr * rr * FD / 1000;
+  const funnel = (Math.PI * FD / 3) * (frTop * frTop + frTop * frBot + frBot * frBot) / 1000;
+  return Math.max(0, above - funnel);
+}
 function buildInnerFoot(p) {
   const d = derived(p);
   const m = Mesh();
   const h = d.innerH;
   const b = innerBoundaries(p);
-  const FD = footDepth(p);
-  const fr = Math.min(p.FOOT_D / 2, b.rCav - 6);
   const fw = p.FOOT_WALL;
-  const fi = Math.max(4, fr - fw);
 
-  // perforation ring in the foot bottom
+  // flared (funnel) foot — prints support-free (geometry in footGeom)
+  const { FD, frTop, frBot } = footGeom(p, d, b);
+  const fiTop = Math.max(6, frTop - fw);
+  const fiBot = Math.max(4, frBot - fw);
+
+  // perforation ring in the foot tip
   const n = Math.max(3, Math.round(p.FOOT_HOLES));
   const hr = p.FOOT_HOLE_D / 2;
-  const ringR = Math.max(hr + 1, fi * 0.55);
+  const ringR = Math.min(Math.max(hr + 1, fiBot * 0.55), fiBot - hr - 1);
   const perfs = [];
   for (let k = 0; k < n; k++) {
     const a = 2 * Math.PI * k / n;
     perfs.push(circlePoly([ringR * Math.cos(a), ringR * Math.sin(a)], hr, 32, false));
   }
 
-  const footO = circlePoly([0, 0], fr, 96, true);   // CCW
-  const footOCW = footO.slice().reverse();
-  const footI = circlePoly([0, 0], fi, 96, true);   // CCW
-  const footICW = footI.slice().reverse();
+  const Ob = circlePoly([0, 0], frBot, 96, true);   // outer tip (CCW)
+  const Ot = circlePoly([0, 0], frTop, 96, true);   // outer top
+  const OtCW = Ot.slice().reverse();
+  const Ib = circlePoly([0, 0], fiBot, 96, true);   // inner tip
+  const IbCW = Ib.slice().reverse();
+  const It = circlePoly([0, 0], fiTop, 96, true);   // inner top
+  const ItCW = It.slice().reverse();
 
   // faces
-  facePolyHoles(m, footO, perfs, 0, false);                       // foot bottom
-  facePolyHoles(m, footI, perfs, p.INNER_FLOOR, true);            // inside the foot
-  facePolyHoles(m, b.outer, [footOCW], FD, false);                // main floor underside
-  facePolyHoles(m, b.holeCCW, [footICW], FD + p.INNER_FLOOR, true); // soil floor
+  facePolyHoles(m, Ob, perfs, 0, false);                          // foot tip (bottom)
+  facePolyHoles(m, Ib, perfs, p.INNER_FLOOR, true);               // inside the tip
+  facePolyHoles(m, b.outer, [OtCW], FD, false);                   // floor lip underside (bridges)
+  facePolyHoles(m, b.holeCCW, [ItCW], FD + p.INNER_FLOOR, true);  // soil floor
   facePolyHoles(m, b.outer, [b.hole], FD + h, true);              // rim
 
   // walls
-  stripRings(m, lift(footO, 0), lift(footO, FD), false);                          // foot outside
-  stripRings(m, lift(footICW, p.INNER_FLOOR), lift(footICW, FD + p.INNER_FLOOR), false); // foot inside
+  stripRings(m, lift(Ob, 0), lift(Ot, FD), false);                               // foot outside (cone)
+  stripRings(m, lift(IbCW, p.INNER_FLOOR), lift(ItCW, FD + p.INNER_FLOOR), false); // foot inside (cone)
   for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, p.INNER_FLOOR), false);    // perf tubes
   stripRings(m, lift(b.outer, FD), lift(b.outer, FD + h), false);                 // pot outside + channel
   stripRings(m, lift(b.holeCCW, FD + p.INNER_FLOOR), lift(b.holeCCW, FD + h), true); // cavity wall
@@ -994,7 +1025,7 @@ function buildProject3MF(p) {
   ]);
 }
 
-const PotCore = { defaultParams, derived, buildOuter, buildInner, buildInnerFoot, footDepth, toBinarySTL, buildProject3MF };
+const PotCore = { defaultParams, derived, buildOuter, buildInner, buildInnerFoot, footDepth, footGeom, footWater, toBinarySTL, buildProject3MF };
 if (typeof module !== 'undefined') module.exports = PotCore;
 if (typeof window !== 'undefined') window.PotCore = PotCore;
 
@@ -1092,6 +1123,13 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     if (pl.p.RIB_DEPTH === 0) continue;            // leave smooth presets alone
     pl.p.RIB_DEPTH = LOOK_DEPTH;
     pl.p.RIB_COUNT = Math.round(Math.PI * pl.p.OUTER_D / RIB_PITCH);
+  }
+
+  // With the flared foot, drop the tip a couple mm deeper (min 2 mm clearance)
+  // so it reaches lower water — reclaiming the dead pool the old tip sat above.
+  // Dry-spell presets keep their taller gap, just reduced.
+  for (const pl of PLANTS) {
+    if (pl.p.FOOT_GAP !== undefined) pl.p.FOOT_GAP = Math.max(2, pl.p.FOOT_GAP - 2);
   }
 
   /* ----- plant picker ----- */
@@ -1397,7 +1435,10 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
   function updateStats() {
     const d = PC.derived(params);
     const rr = d.LOWER_R - (params.SOLID_RESERVOIR ? 3.6 : 0);
-    const resVol = Math.max(0, Math.PI * rr * rr * (params.LEDGE_Z - params.FLOOR) / 1000);
+    // in soil-foot mode the funnel displaces water, so report what's usable
+    const resVol = params.MODE === 'foot'
+      ? PC.footWater(params)
+      : Math.max(0, Math.PI * rr * rr * (params.LEDGE_Z - params.FLOOR) / 1000);
     const stat = (k, v) => '<div class="stat"><span class="k">' + k + '</span> <span class="v">' + v + '</span></div>';
     document.getElementById('stats').innerHTML =
       stat('outer', '<b>&Oslash;' + params.OUTER_D + ' &times; ' + params.H + '</b> mm') +
