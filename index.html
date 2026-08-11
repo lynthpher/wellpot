@@ -316,7 +316,7 @@
         <button id="dlOuter" class="secondary">Outer .stl</button>
         <button id="dlInner" class="secondary">Inner .stl</button>
       </div>
-      <div class="meta">Other slicers: set infill direction to 30&deg; yourself to ensure leak-proof prints</div>
+      <div class="meta">Other slicers: set infill direction to 30&deg; and 4 wall loops yourself to ensure leak-proof prints</div>
     </div>
 
   </div>
@@ -987,7 +987,9 @@ function meshToXml(mesh) {
   return `<mesh><vertices>${vx}</vertices><triangles>${tx.join('')}</triangles></mesh>`;
 }
 
-/* Leakproof PETG process overrides shipped inside the project. */
+/* Leakproof PETG process overrides shipped inside the project. 4 wall loops
+   fuse the 2.4mm reservoir wall (and the seat ring) into solid plastic from
+   both faces, so there is no sparse infill where water sits or the pot bears. */
 function projectSettings() {
   return {
     "from": "project",
@@ -996,8 +998,9 @@ function projectSettings() {
     "printer_settings_id": "Bambu Lab A1 0.4 nozzle",
     "filament_settings_id": ["Generic PETG"],
     "infill_direction": "30",
+    "wall_loops": "4",
     "different_settings_to_system": [
-      "infill_direction",
+      "infill_direction;wall_loops",
       "", ""
     ],
     "version": "02.00.00.00"
