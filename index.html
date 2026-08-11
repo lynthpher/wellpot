@@ -1043,44 +1043,56 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
 
   const PLANTS = [
     { n: 'Small', w: [12, 30], c: 'size', note: 'A little pot — herbs starting out, small houseplants, tight spaces.',
-      p: { OUTER_D: 100, H: 110, LEDGE_Z: 25, RIB_COUNT: 36, RIB_DEPTH: 1.3, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+      p: { OUTER_D: 100, H: 110, LEDGE_Z: 25, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Medium', w: [20, 50], c: 'size', note: 'The all-rounder — a comfortable home for most herbs and mid-size plants.',
-      p: { OUTER_D: 130, H: 150, LEDGE_Z: 35, RIB_COUNT: 48, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+      p: { OUTER_D: 130, H: 150, LEDGE_Z: 35, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Large', w: [30, 75], c: 'size', note: 'A statement pot — bigger plants, longer stretches between refills.',
-      p: { OUTER_D: 170, H: 180, LEDGE_Z: 45, RIB_COUNT: 62, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 3 } },
+      p: { OUTER_D: 170, H: 180, LEDGE_Z: 45, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 3 } },
     { n: 'Test pot', c: 'size', note: 'A quick print to confirm your printer seals — you only need the outer pot. Fill it with water and check it holds overnight. Afterwards it makes a fine propagation cup, succulent planter, or desk catchall.',
       p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0, WICK_SPACING: 20, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Basil', w: [40, 80], c: 'herbs', note: 'Drinks hard and often — wide foot, open perforations, water always in reach.',
-      p: { OUTER_D: 140, H: 175, LEDGE_Z: 40, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+      p: { OUTER_D: 140, H: 175, LEDGE_Z: 40, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
     { n: 'Mint', w: [40, 80], c: 'herbs', note: 'Practically aquatic — it will find the water, and then take over the pot.',
-      p: { OUTER_D: 135, H: 155, LEDGE_Z: 40, RIB_COUNT: 50, RIB_DEPTH: 1.3, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+      p: { OUTER_D: 135, H: 155, LEDGE_Z: 40, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
     { n: 'Parsley', w: [25, 50], c: 'herbs', note: 'Grows a taproot — this one is tall so the root has somewhere to go.',
-      p: { OUTER_D: 140, H: 195, LEDGE_Z: 40, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 40, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+      p: { OUTER_D: 140, H: 195, LEDGE_Z: 40, FOOT_D: 40, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Cilantro', w: [20, 45], c: 'herbs', note: 'A smaller taproot than parsley — tall-ish pot, steady moisture.',
-      p: { OUTER_D: 120, H: 170, LEDGE_Z: 35, RIB_COUNT: 44, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+      p: { OUTER_D: 120, H: 170, LEDGE_Z: 35, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Oregano', w: [10, 25], c: 'herbs', note: 'Likes to dry out between drinks — the foot sits higher so it gets dry spells.',
-      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30, RIB_COUNT: 44, RIB_DEPTH: 1.3, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
+      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
     { n: 'Thyme', w: [8, 20], c: 'herbs', note: 'Mediterranean and modest — small pot, small foot, real dry spells.',
-      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25, RIB_COUNT: 36, RIB_DEPTH: 1.3, FOOT_D: 24, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
+      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25, FOOT_D: 24, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
     { n: 'Rosemary', w: [10, 25], c: 'herbs', note: 'Deep roots, dry habits — tall pot, high foot, let the reservoir run empty.',
-      p: { OUTER_D: 140, H: 180, LEDGE_Z: 30, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 8 } },
+      p: { OUTER_D: 140, H: 180, LEDGE_Z: 30, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 8 } },
     { n: 'Chives', w: [15, 35], c: 'herbs', note: 'Shallow and easygoing — compact pot, steady sips.',
-      p: { OUTER_D: 110, H: 120, LEDGE_Z: 30, RIB_COUNT: 40, RIB_DEPTH: 1.3, FOOT_D: 32, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+      p: { OUTER_D: 110, H: 120, LEDGE_Z: 30, FOOT_D: 32, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Pothos', w: [15, 40], c: 'green', note: 'Forgiving as they come — moderate everything, hard to get wrong.',
-      p: { OUTER_D: 140, H: 140, LEDGE_Z: 35, RIB_COUNT: 52, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
+      p: { OUTER_D: 140, H: 140, LEDGE_Z: 35, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
     { n: 'Peace lily', w: [30, 60], c: 'green', note: 'Loves constant moisture — big reservoir, wide open foot.',
-      p: { OUTER_D: 160, H: 160, LEDGE_Z: 40, RIB_COUNT: 58, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+      p: { OUTER_D: 160, H: 160, LEDGE_Z: 40, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
     { n: 'Fern', w: [30, 60], c: 'green', note: 'A humidity creature — keep the water close and never let it fully dry.',
-      p: { OUTER_D: 150, H: 140, LEDGE_Z: 40, RIB_COUNT: 54, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+      p: { OUTER_D: 150, H: 140, LEDGE_Z: 40, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
     { n: 'African violet', w: [8, 20], c: 'green', note: 'The original self-watered houseplant — small pot, gentle steady moisture.',
-      p: { OUTER_D: 100, H: 90, LEDGE_Z: 25, RIB_COUNT: 36, RIB_DEPTH: 1.3, FOOT_D: 30, FOOT_HOLE_D: 4, FOOT_HOLES: 6, FOOT_GAP: 3 } },
+      p: { OUTER_D: 100, H: 90, LEDGE_Z: 25, FOOT_D: 30, FOOT_HOLE_D: 4, FOOT_HOLES: 6, FOOT_GAP: 3 } },
     { n: 'Spider plant', w: [15, 35], c: 'green', note: 'Tolerant and cheerful — moderate pot, moderate water.',
-      p: { OUTER_D: 130, H: 140, LEDGE_Z: 35, RIB_COUNT: 48, RIB_DEPTH: 1.3, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
+      p: { OUTER_D: 130, H: 140, LEDGE_Z: 35, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
     { n: 'Cherry tomato', w: [150, 360], c: 'veg', note: 'The thirstiest here — best with a patio or dwarf cherry variety at this size, and expect to top up every day or two in summer heat.',
-      p: { OUTER_D: 200, H: 200, LEDGE_Z: 52, RIB_COUNT: 74, RIB_DEPTH: 1.3, FOOT_D: 50, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+      p: { OUTER_D: 200, H: 200, LEDGE_Z: 52, FOOT_D: 50, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
     { n: 'Lettuce', w: [40, 80], c: 'veg', note: 'Shallow roots, thirsty leaves — wide pot, generous reservoir.',
-      p: { OUTER_D: 160, H: 130, LEDGE_Z: 45, RIB_COUNT: 58, RIB_DEPTH: 1.3, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+      p: { OUTER_D: 160, H: 130, LEDGE_Z: 45, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
   ];
+
+  // One "look" policy for every preset: fine flutes at a consistent ~6 mm
+  // pitch (finer than the old ~8.5 mm) with a shallow 1.0 mm depth. Rib count
+  // is just outer-wall modulation, so it barely touches print time, while the
+  // shallower depth keeps each rib within a couple of wall lines — clean, fast
+  // walls and a little less filament. Smooth pots opt out with RIB_DEPTH 0.
+  const RIB_PITCH = 6, LOOK_DEPTH = 1.0;
+  for (const pl of PLANTS) {
+    if (pl.p.RIB_DEPTH === 0) continue;            // leave smooth presets alone
+    pl.p.RIB_DEPTH = LOOK_DEPTH;
+    pl.p.RIB_COUNT = Math.round(Math.PI * pl.p.OUTER_D / RIB_PITCH);
+  }
 
   /* ----- plant picker ----- */
   const plantCard = card('what will live in it?');
