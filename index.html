@@ -540,29 +540,10 @@ function buildOuter(p) {
     }
     return d.R_mean + d.AMP * Math.cos(u); // soft sine
   };
-  const RAMP = 0.04; // rad — keep this TIGHT: the round bore wall holds its curve
-                     // right up to each post, then steps in quickly. A wide ramp
-                     // necks the tube inward and makes the wall look flattened.
-  // Three equidistant fill-port gaps in the reservoir wall (one is the spout).
-  // The wall opens to the bore at each gap; the segments between them double as
-  // the seat the inner pot rests on.
+  // Three equidistant pour notches in the seat lip (one lines up with the
+  // spout). The reservoir wall itself is a plain full-bore cylinder; only the
+  // top rim necks in to form the seat, and these are the openings left in it.
   const GAP_C = [Math.PI/2, Math.PI/2 + 2*Math.PI/3, Math.PI/2 + 4*Math.PI/3];
-  // Wide gaps, small seat segments: the wall opens to the bore everywhere
-  // except a small arc (~RES_SEG_HALF) around each of the 3 segment midpoints.
-  const GAP_HALF = Math.max(notchHalf, Math.PI/3 - RAMP - RES_SEG_HALF);
-  const gapDist = t => {   // angular distance to the nearest gap center
-    let best = Math.PI;
-    for (const c of GAP_C) { let a = Math.abs(t - c); if (a > Math.PI) a = 2*Math.PI - a; best = Math.min(best, a); }
-    return best;
-  };
-  const inNotchRamp = t => gapDist(t) <= GAP_HALF + RAMP;
-  const baseInnerR = t => {
-    const a = gapDist(t);
-    if (a <= GAP_HALF) return d.BORE_R;
-    if (a >= GAP_HALF + RAMP) return d.LOWER_R;
-    const s = 0.5 + 0.5*Math.cos(Math.PI * (a - GAP_HALF) / RAMP);
-    return d.LOWER_R + (d.BORE_R - d.LOWER_R) * s;
-  };
 
   const ring = (rf, z) => thetas.map(t => {
     const r = rf(t);
@@ -600,18 +581,29 @@ function buildOuter(p) {
   // Solid reservoir: thicken the below-waterline wall so 4+4 perimeter loops
   // fuse into solid plastic (no sparse infill anywhere water touches).
   const SOLID_T = 3.6; // extra inward wall thickness, ~4 loops at 0.45mm+
-  const resInnerR = t => (p.SOLID_RESERVOIR && !inNotchRamp(t))
-    ? Math.min(baseInnerR(t), d.LOWER_R - SOLID_T) : baseInnerR(t);
-  // Round floor + full-height seat columns. The floor disk is a clean circle
-  // and the gaps open out to the full bore just above it, but the three seat
-  // segments run the whole way down to the floor as solid columns -- so the
-  // seat is carried on three posts, not floating on short tabs. Only the disk
-  // itself is held at one radius (via the fillet) so the floor stays round.
-  const rFloor = d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0); // = seat/column radius
-  const filletR = (t, u) => { // u = z - FLOOR in [0,F]
+  const resInner = d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0);   // seat radius
+  const seatRise = Math.max(0, d.BORE_R - resInner);
+  // Continuous seat lip (no posts). The reservoir wall is a clean full-bore
+  // cylinder with a round floor; only the top rim necks inward to the seat
+  // radius, all the way around, forming one ledge the inner pot's cone rests on.
+  // With no posts there are no post/wall junctions to flatten or corner. Three
+  // narrow notches stay open to the bore so water pours past the pot.
+  const notchDist = t => {   // angular distance to the nearest pour notch
+    let best = Math.PI;
+    for (const c of GAP_C) { let a = Math.abs(t - c); if (a > Math.PI) a = 2*Math.PI - a; best = Math.min(best, a); }
+    return best;
+  };
+  const NOTCH_HALF = Math.max(notchHalf, 0.18), NR = 0.06;
+  const lipR = t => {        // rim necks to resInner on the lip, stays at bore in the notches
+    const a = notchDist(t);
+    if (a <= NOTCH_HALF) return d.BORE_R;
+    if (a >= NOTCH_HALF + NR) return resInner;
+    const s = 0.5 + 0.5*Math.cos(Math.PI * (a - NOTCH_HALF) / NR);
+    return resInner + (d.BORE_R - resInner) * s;
+  };
+  const filletR = (t, u) => { // round floor at the full bore
     const drop = F - Math.sqrt(Math.max(0, F*F - (F-u)*(F-u)));
-    const base = rFloor + (resInnerR(t) - rFloor) * (F > 0 ? u / F : 1);
-    return base - drop;
+    return d.BORE_R - drop;
   };
   const irows = [];
   const KF = 6;
@@ -619,10 +611,17 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // full-height columns (segments) / full-bore gaps, then the conical seat flare
-  const seatRise = Math.max(0, d.BORE_R - (d.LOWER_R - SOLID_T));
-  irows.push(ring(resInnerR, p.LEDGE_Z));
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // conical seat
+  // clean full-bore cylinder up to the lip zone
+  const LIP_H = Math.min(Math.max(2, p.LEDGE_Z - p.FLOOR - F - 0.5), Math.max(7, seatRise + 2));
+  const zLip0 = p.LEDGE_Z - LIP_H;
+  irows.push(ring(() => d.BORE_R, zLip0));
+  // neck the rim inward to the continuous lip (bore -> lipR)
+  const KL = 4;
+  for (let k = 1; k <= KL; k++) {
+    const z = zLip0 + LIP_H * k / KL, fr = k / KL;
+    irows.push(ring(t => d.BORE_R + (lipR(t) - d.BORE_R) * fr, z));
+  }
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));   // seat flares back out to the bore
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
@@ -670,16 +669,8 @@ function buildOuter(p) {
         ringVoid(r, r + 2.0, SK, p.FLOOR - SK);
       }
     }
-    // double-hull reservoir wall: one solid-wall void per full-height column
-    // between the 3 fill-port gaps
-    if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
-      const half = GAP_HALF + RAMP + 0.06;
-      for (let k = 0; k < GAP_C.length; k++) {
-        const a0 = GAP_C[k] + half;
-        const a1 = GAP_C[(k + 1) % GAP_C.length] + (k === GAP_C.length - 1 ? 2 * Math.PI : 0) - half;
-        ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0, p.FLOOR + 1.4, p.LEDGE_Z - 1.4, a0, a1);
-      }
-    }
+    // (The reservoir wall is a uniform full-bore cylinder -- same construction
+    // all the way around -- so there is no thick segment wall to double-hull.)
   }
 
   // --- caps ---
@@ -809,11 +800,9 @@ function footGeom(p, d) {
 function footWater(p) {
   const d = derived(p);
   const g = footGeom(p, d);
-  const rr = d.LOWER_R - (p.SOLID_RESERVOIR ? 3.6 : 0);        // reservoir radius at the seat columns
-  // the wall is open to the bore across the 3 gaps and only at rr on the small
-  // seat columns, so most of the reservoir is as wide as the bore
-  const segFrac = Math.min(1, 3 * 2 * RES_SEG_HALF / (2 * Math.PI));
-  const effR2 = (1 - segFrac) * d.BORE_R * d.BORE_R + segFrac * rr * rr;
+  // the reservoir is a full-bore cylinder; only the thin top rim necks in to
+  // the seat lip, so essentially the whole depth is bore-wide
+  const effR2 = d.BORE_R * d.BORE_R;
   const rTop = g.frBot + g.FD;                                  // funnel radius at the reservoir top
   const above = Math.PI * effR2 * g.FD / 1000;
   const funnel = (Math.PI * g.FD / 3) * (rTop * rTop + rTop * g.frBot + g.frBot * g.frBot) / 1000;
