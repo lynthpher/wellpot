@@ -613,16 +613,17 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // Keep the conical ledge only at 3 arcs; cut it away between them. On an arc
-  // the seat slopes from the reservoir wall up to the bore (the inner cone
-  // rests here); in a gap it steps straight out to the bore and runs up as
-  // plain wall. Reservoir wall + double-hull stay uniform (leak-proof); the
-  // fill notch stays open.
+  // Cut the reservoir wall away between 3 equidistant arcs, leaving 3 standing
+  // posts that rise to the ledge — the inner cone rests on the 3 post tops.
+  // Below the cut the wall is whole; above it, the gaps open straight out to
+  // the bore. (Leak-proofing verified fine by the user.) Fill notch stays open.
   const seatRise = Math.max(0, d.BORE_R - (d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0)));
-  const arcR = t => d.BORE_R - (d.BORE_R - resInnerR(t)) * seatArcMask(t);  // arcs stay in; gaps at bore
-  irows.push(ring(resInnerR, p.LEDGE_Z));                        // reservoir wall top
-  irows.push(ring(arcR, p.LEDGE_Z));                            // gaps step out to bore; arcs stay at the wall
-  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));       // arcs slope up to the bore (the 3 ledges)
+  const CUT_Z = p.FLOOR + F + (p.LEDGE_Z - p.FLOOR - F) * 0.4;   // wall whole below; cut in the gaps above
+  const postR = t => d.BORE_R - (d.BORE_R - resInnerR(t)) * seatArcMask(t);  // arcs keep the wall; gaps at bore
+  irows.push(ring(resInnerR, CUT_Z));                          // reservoir wall up to the cut
+  irows.push(ring(postR, CUT_Z));                              // gaps cut out to the bore; posts keep the wall
+  irows.push(ring(postR, p.LEDGE_Z));                          // 3 posts rise to the ledge; gaps are open bore
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));      // small seat on each of the 3 post tops
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
