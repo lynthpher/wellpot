@@ -523,7 +523,6 @@ function buildOuter(p) {
   for (let i = 0; i < N; i++) thetas.push(2*Math.PI*i/N);
 
   const CHAM = 0.8, RIMF = 1.0;
-  const notchHalf = Math.asin((p.FILL_PORT_D/2) / d.BORE_R);
   const style = p.RIB_STYLE || 'sine';
   const ribR = t => {
     const u = p.RIB_COUNT * t;
@@ -540,11 +539,6 @@ function buildOuter(p) {
     }
     return d.R_mean + d.AMP * Math.cos(u); // soft sine
   };
-  // Three equidistant pour notches in the seat lip (one lines up with the
-  // spout). The reservoir wall itself is a plain full-bore cylinder; only the
-  // top rim necks in to form the seat, and these are the openings left in it.
-  const GAP_C = [Math.PI/2, Math.PI/2 + 2*Math.PI/3, Math.PI/2 + 4*Math.PI/3];
-
   const ring = (rf, z) => thetas.map(t => {
     const r = rf(t);
     return [r*Math.cos(t), r*Math.sin(t), z];
@@ -583,24 +577,12 @@ function buildOuter(p) {
   const SOLID_T = 3.6; // extra inward wall thickness, ~4 loops at 0.45mm+
   const resInner = d.LOWER_R - (p.SOLID_RESERVOIR ? SOLID_T : 0);   // seat radius
   const seatRise = Math.max(0, d.BORE_R - resInner);
-  // Continuous seat lip (no posts). The reservoir wall is a clean full-bore
-  // cylinder with a round floor; only the top rim necks inward to the seat
-  // radius, all the way around, forming one ledge the inner pot's cone rests on.
-  // With no posts there are no post/wall junctions to flatten or corner. Three
-  // narrow notches stay open to the bore so water pours past the pot.
-  const notchDist = t => {   // angular distance to the nearest pour notch
-    let best = Math.PI;
-    for (const c of GAP_C) { let a = Math.abs(t - c); if (a > Math.PI) a = 2*Math.PI - a; best = Math.min(best, a); }
-    return best;
-  };
-  const NOTCH_HALF = Math.max(notchHalf, 0.18), NR = 0.06;
-  const lipR = t => {        // rim necks to resInner on the lip, stays at bore in the notches
-    const a = notchDist(t);
-    if (a <= NOTCH_HALF) return d.BORE_R;
-    if (a >= NOTCH_HALF + NR) return resInner;
-    const s = 0.5 + 0.5*Math.cos(Math.PI * (a - NOTCH_HALF) / NR);
-    return resInner + (d.BORE_R - resInner) * s;
-  };
+  // Uniform hull: the reservoir wall is one continuous inner liner at resInner
+  // (round floor, no notches), so the double-hull void wraps the entire
+  // waterline with no single-wall openings. It flares out to the bore at the
+  // continuous 45deg seat the inner pot's cone rests on. Filling is top-watering
+  // — water drains through the inner pot's foot into the reservoir — so the wall
+  // needs no opening. Everything widens going up (bore opening): no overhangs.
   const filletR = (t, u) => { // round floor at the inner-liner radius
     const drop = F - Math.sqrt(Math.max(0, F*F - (F-u)*(F-u)));
     return resInner - drop;
@@ -611,24 +593,8 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // The reservoir wall sits at the inner-liner radius (resInner) so the
-  // double-hull void has wall to live in. It opens out to the bore only at the
-  // 3 pour notches, and flares out to the bore at the continuous seat the pot
-  // rests on. Everything widens going up (bore opening), so nothing overhangs.
-  const LIP_H = Math.min(Math.max(2, p.LEDGE_Z - p.FLOOR - F - 0.5), Math.max(9, seatRise * 1.9));
-  const zLip0 = p.LEDGE_Z - LIP_H;
-  irows.push(ring(() => resInner, zLip0));
-  const smooth = t => t * t * (3 - 2 * t);
-  const KN = 6;                                   // liner -> notch opening (bore at notches, resInner on the lip)
-  for (let k = 1; k <= KN; k++) {
-    const s = smooth(k / KN), z = zLip0 + LIP_H * k / KN;
-    irows.push(ring(t => resInner + (lipR(t) - resInner) * s, z));
-  }
-  const KU = 4;                                   // flare out: lip -> bore (up-facing, rounded)
-  for (let k = 1; k <= KU; k++) {
-    const s = smooth(k / KU), z = p.LEDGE_Z + seatRise * k / KU;
-    irows.push(ring(t => lipR(t) + (d.BORE_R - lipR(t)) * s, z));
-  }
+  irows.push(ring(() => resInner, p.LEDGE_Z));               // liner wall straight up to the seat
+  irows.push(ring(() => d.BORE_R, p.LEDGE_Z + seatRise));    // 45deg seat flare (the foot rests here)
   irows.push(ring(() => d.BORE_R, p.H));
   for (let i = 0; i < irows.length - 1; i++) stripRings(m, irows[i], irows[i+1], true);
 
@@ -678,26 +644,18 @@ function buildOuter(p) {
     }
     // Double-hull: an annular air-gap void inside the below-waterline wall,
     // leaving an independent inner liner (resInner .. LOWER_R-2.2, ~1.4mm) that
-    // still holds water if the outer wall's print seams weep. Continuous arcs
-    // between the 3 pour notches — the notch sectors open to the bore and can't
-    // be double-walled. Top raised to LEDGE_Z-0.8 (keeps a 0.8mm bridging
-    // ceiling) so the void now covers the waterline band where a pinhole was
-    // observed; bottom dropped to FLOOR+0.9 so only a 0.8mm wetted strip sits
-    // above the floor slab. Liner stays >=1.2mm, no void face <0.8mm from water.
+    // still holds water if the outer wall's print seams weep. With the uniform
+    // hull (no notches) it runs as one continuous ring, so the ENTIRE waterline
+    // is double-walled — no single-wall strips remain. Top at LEDGE_Z-0.8 (keeps
+    // a 0.8mm bridging ceiling) covers the waterline band where a pinhole was
+    // seen; bottom at FLOOR+0.9 leaves only a 0.8mm wetted strip above the floor
+    // slab. Liner >=1.2mm, no void face <0.8mm from a wetted surface.
     //
-    // Residual single-wall strips that CAN'T close in-model: the 3 narrow pour
-    // notches (they must stay open to fill). If one weeps, the print-settings
-    // fallback for seam pinholes: paint the seam to the spout/notch side, enable
-    // scarf (staggered) seams, run flow-dynamics (pressure-advance) calibration,
-    // and bump nozzle temp +5C for stronger layer bonding.
+    // Print-settings fallback for any residual seam pinhole: paint the seam to
+    // the spout side, enable scarf (staggered) seams, run flow-dynamics
+    // (pressure-advance) calibration, and bump nozzle temp +5C for bonding.
     if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
-      const half = NOTCH_HALF + NR + 0.06;         // clear the notch opening + its ramp
-      const zBot = p.FLOOR + 0.9, zTop = p.LEDGE_Z - 0.8;
-      for (let k = 0; k < GAP_C.length; k++) {
-        const a0 = GAP_C[k] + half;
-        const a1 = GAP_C[(k + 1) % GAP_C.length] + (k === GAP_C.length - 1 ? 2 * Math.PI : 0) - half;
-        ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0, zBot, zTop, a0, a1);
-      }
+      ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0, p.FLOOR + 0.9, p.LEDGE_Z - 0.8); // full ring
     }
   }
 
