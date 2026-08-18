@@ -797,61 +797,77 @@ function footWater(p) {
 function buildInnerFoot(p) {
   const d = derived(p);
   const m = Mesh();
-  const b = innerBoundaries(p);
   const fw = p.FOOT_WALL;
   const { FD, seatRise, coneH, frBot } = footGeom(p, d);
+  const r_o = d.r_o, rCav = r_o - p.INNER_WALL;
   const fiBot = Math.max(4, frBot - fw);
-  const rimZ = FD + d.innerH;           // total height and seat position are unchanged
+  const rimZ = FD + d.innerH;           // total height and seat position unchanged
+  const INF = p.INNER_FLOOR, M = 128;
 
-  // Continuous conical foot: the whole outer surface runs as one 45deg cone
-  // from a small perforated tip up to the full (notched) rim boundary at the
-  // seat, then vertical. It seats on the outer pot's matching 45deg ledge, so
-  // there is no flat floor lip to overhang. toTip() shrinks a boundary toward
-  // the axis (keeping its point count and its fill-port notch, which just
-  // fades out toward the tip) so the cone morphs cleanly.
-  const toTip = (poly, r) => poly.map(pt => {
-    const l = Math.hypot(pt[0], pt[1]) || 1;
-    return [pt[0] * r / l, pt[1] * r / l];
-  });
-  const outerTip = toTip(b.outer, frBot);        // CCW, tip radius
-  const holeTip = toTip(b.holeCCW, fiBot);       // CCW, inner tip radius
+  // Plain circular foot (matches the uniform circular seat — the hull has no
+  // opening to line a fill-port notch up with anymore). One 45deg cone from a
+  // small perforated tip up to the rim, but the wall carries a band of vertical
+  // drainage slots so the soil drains and breathes at whatever level the water
+  // sits, not just at the tip. Fill by top-watering — it drains to the well.
+  const circ = R => { const a = []; for (let k = 0; k < M; k++) { const t = 2*Math.PI*k/M; a.push([R*Math.cos(t), R*Math.sin(t)]); } return a; };
+  const Ro = z => frBot + (r_o - frBot) * z / coneH;                    // outer cone radius
+  const Ri = z => fiBot + (rCav - fiBot) * (z - INF) / (coneH - INF);   // inner funnel radius
 
-  // perforation ring in the foot tip
+  // perforated tip (flat bottom)
   const n = Math.max(3, Math.round(p.FOOT_HOLES));
   const hr = p.FOOT_HOLE_D / 2;
   const ringR = Math.min(Math.max(hr + 1, fiBot * 0.55), Math.max(hr + 1, fiBot - hr - 1));
   const perfs = [];
-  for (let k = 0; k < n; k++) {
-    const a = 2 * Math.PI * k / n;
-    perfs.push(circlePoly([ringR * Math.cos(a), ringR * Math.sin(a)], hr, 32, false));
+  for (let k = 0; k < n; k++) { const a = 2*Math.PI*k/n; perfs.push(circlePoly([ringR*Math.cos(a), ringR*Math.sin(a)], hr, 32, false)); }
+  facePolyHoles(m, circ(frBot), perfs, 0, false);              // tip bottom
+  facePolyHoles(m, circ(fiBot), perfs, INF, true);             // inside the tip
+  for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, INF), false); // perf tubes
+
+  // drainage slot band: NS ribs carry the wall, slots between them are framed
+  // openings through the full wall (outer + inner + bottom/top/side caps).
+  const z1 = Math.max(INF + 1.5, coneH * 0.18);
+  const z2 = Math.min(coneH - 2.0, coneH * 0.85);
+  const slotOK = z2 > z1 + 1.5;
+  const NS = 8, per = M / NS, ribCols = Math.round(per * 0.5);
+  const isSlot = i => slotOK && ((((i % per) + per) % per) >= ribCols);
+  const OA = lift(circ(Ro(z1)), z1), OB = lift(circ(Ro(z2)), z2);
+  const IA = lift(circ(Ri(z1)), z1), IB = lift(circ(Ri(z2)), z2);
+
+  // solid cone below and above the slot band (full rings)
+  stripRings(m, lift(circ(frBot), 0), OA, false);
+  stripRings(m, OB, lift(circ(r_o), coneH), false);
+  stripRings(m, lift(circ(fiBot), INF), IA, true);
+  stripRings(m, IB, lift(circ(rCav), coneH), true);
+
+  // the slot band
+  for (let i = 0; i < M; i++) {
+    const j = (i + 1) % M;
+    if (!isSlot(i)) {
+      addQuad(m, OA[i], OA[j], OB[j], OB[i]);        // rib outer face
+      addQuad(m, IA[i], IB[i], IB[j], IA[j]);        // rib inner face
+    } else {
+      addQuad(m, OA[i], OA[j], IA[j], IA[i]);        // slot floor  (faces up)
+      addQuad(m, OB[i], IB[i], IB[j], OB[j]);        // slot ceiling (faces down)
+    }
+    const prevSlot = isSlot((i - 1 + M) % M);
+    if (isSlot(i) && !prevSlot) addQuad(m, OA[i], IA[i], IB[i], OB[i]); // rib->slot side wall
+    if (!isSlot(i) && prevSlot) addQuad(m, OA[i], OB[i], IB[i], IA[i]); // slot->rib side wall
   }
 
-  // faces
-  facePolyHoles(m, outerTip, perfs, 0, false);                   // foot tip (bottom)
-  facePolyHoles(m, holeTip, perfs, p.INNER_FLOOR, true);         // inside the tip
-
-  // walls — one continuous cone to the seat, then a vertical body
-  stripRings(m, lift(outerTip, 0), lift(b.outer, coneH), false);            // outer cone (tip -> seat)
-  stripRings(m, lift(holeTip, p.INNER_FLOOR), lift(b.holeCCW, coneH), true); // inner funnel
-  stripRings(m, lift(b.holeCCW, coneH), lift(b.holeCCW, rimZ), true);        // inner body (to rim)
-  for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, p.INNER_FLOOR), false); // perf tubes
-
-  // Rounded pour lip: roll the outer top edge over a small bullnose so the
-  // fill spout (and the whole rim) sheds water cleanly instead of catching on
-  // a sharp corner and dribbling.
-  const RND = Math.min(1.2, (d.r_o - b.rCav) * 0.9);
-  const scaleXY = (poly, f) => poly.map(pt => [pt[0] * f, pt[1] * f]);
-  stripRings(m, lift(b.outer, coneH), lift(b.outer, rimZ - RND), false);    // outer body up to the lip
-  let lipPrev = b.outer, lipZ = rimZ - RND;
+  // inner body to the rim + rounded circular pour lip
+  stripRings(m, lift(circ(rCav), coneH), lift(circ(rCav), rimZ), true);
+  const RND = Math.min(1.2, (r_o - rCav) * 0.9);
+  stripRings(m, lift(circ(r_o), coneH), lift(circ(r_o), rimZ - RND), false);
+  let lipPrev = circ(r_o), lipZ = rimZ - RND;
   const LIPN = 3;
   for (let k = 1; k <= LIPN; k++) {
     const s = k / LIPN;
-    const inset = RND - Math.sqrt(Math.max(0, RND * RND - s * s * RND * RND));
-    const cur = scaleXY(b.outer, (d.r_o - inset) / d.r_o);
-    stripRings(m, lift(lipPrev, lipZ), lift(cur, rimZ - RND + s * RND), false);
-    lipPrev = cur; lipZ = rimZ - RND + s * RND;
+    const inset = RND - Math.sqrt(Math.max(0, RND*RND - s*s*RND*RND));
+    const cur = circ(r_o - inset);
+    stripRings(m, lift(lipPrev, lipZ), lift(cur, rimZ - RND + s*RND), false);
+    lipPrev = cur; lipZ = rimZ - RND + s*RND;
   }
-  facePolyHoles(m, lipPrev, [b.hole], rimZ, true);                          // flat top of the lip
+  facePolyHoles(m, lipPrev, [circ(rCav)], rimZ, true);         // flat top annulus of the lip
   return m;
 }
 

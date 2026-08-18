@@ -30,10 +30,18 @@ function loadPotCore() {
   return new Function(code + '\nreturn PotCore;')();
 }
 
-// ---- rebuild a preset's outer-pot params the way the app does -----------
-// (Only outer-pot-relevant fields matter here; buildOuter ignores foot params.)
-function preset(PotCore, over) {
-  const p = Object.assign({}, PotCore.defaultParams(), over);
+// ---- rebuild a preset's params the way the app does ---------------------
+// tier -> foot geometry (mirrors footParams() in index.html), applied in foot mode
+function footParams(moisture, D) {
+  const spec = {
+    thirsty: { ratio: 0.31, holeD: 6.0, gap: 2,  holes: D < 120 ? 6 : 8 },
+    steady:  { ratio: 0.23, holeD: 4.0, gap: 7,  holes: D < 120 ? 4 : 6 },
+    dry:     { ratio: 0.18, holeD: 3.5, gap: 10, holes: 3 },
+  }[moisture] || { ratio: 0.23, holeD: 4.0, gap: 7, holes: D < 120 ? 4 : 6 };
+  return { FOOT_D: Math.round(D * spec.ratio), FOOT_HOLES: spec.holes, FOOT_HOLE_D: spec.holeD, FOOT_GAP: spec.gap };
+}
+function preset(PotCore, over, moisture) {
+  const p = Object.assign({}, PotCore.defaultParams(), over, { MODE: 'foot' }, footParams(moisture, over.OUTER_D));
   if (p.RIB_DEPTH !== 0) {                    // app's "look" normalization
     p.RIB_DEPTH = 1.0;
     p.RIB_COUNT = Math.round(Math.PI * p.OUTER_D / 6);
@@ -42,12 +50,13 @@ function preset(PotCore, over) {
 }
 
 const PRESETS = [
-  { n: 'Test pot (smallest)', p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0 } },
-  { n: 'Thyme (small)',       p: { OUTER_D: 100, H: 120, LEDGE_Z: 25 } },
-  { n: 'Oregano (dry)',       p: { OUTER_D: 120, H: 150, LEDGE_Z: 30 } },
-  { n: 'Medium',              p: { OUTER_D: 130, H: 150, LEDGE_Z: 40 } },
-  { n: 'Large',               p: { OUTER_D: 170, H: 180, LEDGE_Z: 45 } },
-  { n: 'Cherry tomato (largest)', p: { OUTER_D: 200, H: 200, LEDGE_Z: 52 } },
+  { n: 'Test pot (smallest)', m: 'steady',  p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0 } },
+  { n: 'Thyme (small, dry)',  m: 'dry',      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25 } },
+  { n: 'Oregano (dry)',       m: 'dry',      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30 } },
+  { n: 'Medium (steady)',     m: 'steady',   p: { OUTER_D: 130, H: 150, LEDGE_Z: 40 } },
+  { n: 'Large (steady)',      m: 'steady',   p: { OUTER_D: 170, H: 180, LEDGE_Z: 45 } },
+  { n: 'Basil (thirsty)',     m: 'thirsty',  p: { OUTER_D: 140, H: 175, LEDGE_Z: 43 } },
+  { n: 'Cherry tomato (largest)', m: 'thirsty', p: { OUTER_D: 200, H: 200, LEDGE_Z: 52 } },
 ];
 
 // ---- parse binary STL into a flat triangle-vertex list ------------------
@@ -97,23 +106,26 @@ function checkWatertight(tris) {
 }
 
 // ---- run -----------------------------------------------------------------
+function checkMesh(PotCore, mesh) {
+  const stl = PotCore.toBinarySTL(mesh); // ArrayBuffer
+  return checkWatertight(parseBinarySTL(stl));
+}
+function line(tag, n, r) {
+  return (r.ok ? 'PASS' : 'FAIL') + '  ' + tag.padEnd(28) +
+    '  tris=' + String(r.tris).padStart(6) +
+    '  nonmanifold=' + r.nonmanifold + '  openEdges=' + r.boundary + '  degenerate=' + r.degenerate;
+}
 function main() {
   const PotCore = loadPotCore();
   let allOk = true;
-  console.log('meshcheck — outer pot watertightness\n');
-  for (const { n, p } of PRESETS) {
-    const params = preset(PotCore, p);
-    const mesh = PotCore.buildOuter(params);
-    const stl = PotCore.toBinarySTL(mesh); // ArrayBuffer
-    const r = checkWatertight(parseBinarySTL(stl));
-    allOk = allOk && r.ok;
-    console.log(
-      (r.ok ? 'PASS' : 'FAIL') + '  ' + n.padEnd(24) +
-      '  tris=' + String(r.tris).padStart(6) +
-      '  nonmanifold=' + r.nonmanifold +
-      '  openEdges=' + r.boundary +
-      '  degenerate=' + r.degenerate
-    );
+  console.log('meshcheck — outer pot + inner foot watertightness\n');
+  for (const { n, m, p } of PRESETS) {
+    const params = preset(PotCore, p, m);
+    const ro = checkMesh(PotCore, PotCore.buildOuter(params));       // outer pot
+    const ri = checkMesh(PotCore, PotCore.buildInnerFoot(params));   // slotted inner foot
+    allOk = allOk && ro.ok && ri.ok;
+    console.log(line(n + ' · outer', n, ro));
+    console.log(line(n + ' · foot ', n, ri));
   }
   console.log('\n' + (allOk ? 'ALL WATERTIGHT' : 'WATERTIGHTNESS FAILED'));
   process.exit(allOk ? 0 : 1);
