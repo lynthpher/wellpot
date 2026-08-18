@@ -601,9 +601,9 @@ function buildOuter(p) {
     const s = 0.5 + 0.5*Math.cos(Math.PI * (a - NOTCH_HALF) / NR);
     return resInner + (d.BORE_R - resInner) * s;
   };
-  const filletR = (t, u) => { // round floor at the full bore
+  const filletR = (t, u) => { // round floor at the inner-liner radius
     const drop = F - Math.sqrt(Math.max(0, F*F - (F-u)*(F-u)));
-    return d.BORE_R - drop;
+    return resInner - drop;
   };
   const irows = [];
   const KF = 6;
@@ -611,19 +611,18 @@ function buildOuter(p) {
     const u = F * k / KF;
     irows.push(ring(t => filletR(t, u), p.FLOOR + u));
   }
-  // clean full-bore cylinder up to the lip zone, then a smoothly rounded seat
-  // groove: the wall eases inward to the lip and back out with no sharp root or
-  // waist corner -- so the pot's load spreads over a ring (no stress riser) and
-  // the internal valley prints clean. The neck stays under ~40deg from vertical
-  // so it needs no supports.
+  // The reservoir wall sits at the inner-liner radius (resInner) so the
+  // double-hull void has wall to live in. It opens out to the bore only at the
+  // 3 pour notches, and flares out to the bore at the continuous seat the pot
+  // rests on. Everything widens going up (bore opening), so nothing overhangs.
   const LIP_H = Math.min(Math.max(2, p.LEDGE_Z - p.FLOOR - F - 0.5), Math.max(9, seatRise * 1.9));
   const zLip0 = p.LEDGE_Z - LIP_H;
-  irows.push(ring(() => d.BORE_R, zLip0));
+  irows.push(ring(() => resInner, zLip0));
   const smooth = t => t * t * (3 - 2 * t);
-  const KN = 6;                                   // neck in: bore -> lip (rounds the root + waist)
+  const KN = 6;                                   // liner -> notch opening (bore at notches, resInner on the lip)
   for (let k = 1; k <= KN; k++) {
     const s = smooth(k / KN), z = zLip0 + LIP_H * k / KN;
-    irows.push(ring(t => d.BORE_R + (lipR(t) - d.BORE_R) * s, z));
+    irows.push(ring(t => resInner + (lipR(t) - resInner) * s, z));
   }
   const KU = 4;                                   // flare out: lip -> bore (up-facing, rounded)
   for (let k = 1; k <= KU; k++) {
@@ -677,8 +676,29 @@ function buildOuter(p) {
         ringVoid(r, r + 2.0, SK, p.FLOOR - SK);
       }
     }
-    // (The reservoir wall is a uniform full-bore cylinder -- same construction
-    // all the way around -- so there is no thick segment wall to double-hull.)
+    // Double-hull: an annular air-gap void inside the below-waterline wall,
+    // leaving an independent inner liner (resInner .. LOWER_R-2.2, ~1.4mm) that
+    // still holds water if the outer wall's print seams weep. Continuous arcs
+    // between the 3 pour notches — the notch sectors open to the bore and can't
+    // be double-walled. Top raised to LEDGE_Z-0.8 (keeps a 0.8mm bridging
+    // ceiling) so the void now covers the waterline band where a pinhole was
+    // observed; bottom dropped to FLOOR+0.9 so only a 0.8mm wetted strip sits
+    // above the floor slab. Liner stays >=1.2mm, no void face <0.8mm from water.
+    //
+    // Residual single-wall strips that CAN'T close in-model: the 3 narrow pour
+    // notches (they must stay open to fill). If one weeps, the print-settings
+    // fallback for seam pinholes: paint the seam to the spout/notch side, enable
+    // scarf (staggered) seams, run flow-dynamics (pressure-advance) calibration,
+    // and bump nozzle temp +5C for stronger layer bonding.
+    if (p.SOLID_RESERVOIR && p.LEDGE_Z - p.FLOOR > 6) {
+      const half = NOTCH_HALF + NR + 0.06;         // clear the notch opening + its ramp
+      const zBot = p.FLOOR + 0.9, zTop = p.LEDGE_Z - 0.8;
+      for (let k = 0; k < GAP_C.length; k++) {
+        const a0 = GAP_C[k] + half;
+        const a1 = GAP_C[(k + 1) % GAP_C.length] + (k === GAP_C.length - 1 ? 2 * Math.PI : 0) - half;
+        ringVoid(d.LOWER_R - 2.2, d.LOWER_R - 1.0, zBot, zTop, a0, a1);
+      }
+    }
   }
 
   // --- caps ---
@@ -808,9 +828,9 @@ function footGeom(p, d) {
 function footWater(p) {
   const d = derived(p);
   const g = footGeom(p, d);
-  // the reservoir is a full-bore cylinder; only the thin top rim necks in to
-  // the seat lip, so essentially the whole depth is bore-wide
-  const effR2 = d.BORE_R * d.BORE_R;
+  // the reservoir wall is the inner liner (resInner); only the 3 narrow pour
+  // notches open wider, so the water column is essentially the liner radius
+  const effR2 = g.resInner * g.resInner;
   const rTop = g.frBot + g.FD;                                  // funnel radius at the reservoir top
   const above = Math.PI * effR2 * g.FD / 1000;
   const funnel = (Math.PI * g.FD / 3) * (rTop * rTop + rTop * g.frBot + g.frBot * g.frBot) / 1000;
@@ -1114,46 +1134,69 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     return c;
   }
 
+  // Per-plant moisture tier drives the foot geometry (see footParams). Field
+  // data: real pots run wetter than intended because peat potting mix wicks far
+  // harder than the mineral substrates these systems assume — so the whole scale
+  // is calibrated one notch drier than hand-set values used to be.
   const PLANTS = [
-    { n: 'Small', w: [12, 30], c: 'size', note: 'A little pot — herbs starting out, small houseplants, tight spaces.',
-      p: { OUTER_D: 100, H: 110, LEDGE_Z: 25, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Medium', w: [20, 50], c: 'size', note: 'The all-rounder — a comfortable home for most herbs and mid-size plants.',
-      p: { OUTER_D: 130, H: 150, LEDGE_Z: 40, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Large', w: [30, 75], c: 'size', note: 'A statement pot — bigger plants, longer stretches between refills.',
-      p: { OUTER_D: 170, H: 180, LEDGE_Z: 45, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 3 } },
-    { n: 'Test pot', c: 'size', note: 'A quick print to confirm your printer seals — you only need the outer pot. Fill it with water and check it holds overnight. Afterwards it makes a fine propagation cup, succulent planter, or desk catchall.',
-      p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0, WICK_SPACING: 20, FOOT_D: 30, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Basil', w: [40, 80], c: 'herbs', note: 'Drinks hard and often — wide foot, open perforations, water always in reach.',
-      p: { OUTER_D: 140, H: 175, LEDGE_Z: 43, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
-    { n: 'Mint', w: [40, 80], c: 'herbs', note: 'Practically aquatic — it will find the water, and then take over the pot.',
-      p: { OUTER_D: 135, H: 155, LEDGE_Z: 43, FOOT_D: 42, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
-    { n: 'Parsley', w: [25, 50], c: 'herbs', note: 'Grows a taproot — this one is tall so the root has somewhere to go.',
-      p: { OUTER_D: 140, H: 195, LEDGE_Z: 40, FOOT_D: 40, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Cilantro', w: [20, 45], c: 'herbs', note: 'A smaller taproot than parsley — tall-ish pot, steady moisture.',
-      p: { OUTER_D: 120, H: 170, LEDGE_Z: 40, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Oregano', w: [10, 25], c: 'herbs', note: 'Likes to dry out between drinks — the foot sits higher so it gets dry spells.',
-      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
-    { n: 'Thyme', w: [8, 20], c: 'herbs', note: 'Mediterranean and modest — small pot, small foot, real dry spells.',
-      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25, FOOT_D: 24, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 7 } },
-    { n: 'Rosemary', w: [10, 25], c: 'herbs', note: 'Deep roots, dry habits — tall pot, high foot, let the reservoir run empty.',
-      p: { OUTER_D: 140, H: 180, LEDGE_Z: 30, FOOT_D: 28, FOOT_HOLE_D: 4, FOOT_HOLES: 4, FOOT_GAP: 8 } },
-    { n: 'Chives', w: [15, 35], c: 'herbs', note: 'Shallow and easygoing — compact pot, steady sips.',
-      p: { OUTER_D: 110, H: 120, LEDGE_Z: 35, FOOT_D: 32, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Pothos', w: [15, 40], c: 'green', note: 'Forgiving as they come — moderate everything, hard to get wrong.',
-      p: { OUTER_D: 140, H: 140, LEDGE_Z: 35, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
-    { n: 'Peace lily', w: [30, 60], c: 'green', note: 'Loves constant moisture — big reservoir, wide open foot.',
-      p: { OUTER_D: 160, H: 160, LEDGE_Z: 40, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
-    { n: 'Fern', w: [30, 60], c: 'green', note: 'A humidity creature — keep the water close and never let it fully dry.',
-      p: { OUTER_D: 150, H: 140, LEDGE_Z: 40, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
-    { n: 'African violet', w: [8, 20], c: 'green', note: 'The original self-watered houseplant — small pot, gentle steady moisture.',
-      p: { OUTER_D: 100, H: 90, LEDGE_Z: 25, FOOT_D: 30, FOOT_HOLE_D: 4, FOOT_HOLES: 6, FOOT_GAP: 3 } },
-    { n: 'Spider plant', w: [15, 35], c: 'green', note: 'Tolerant and cheerful — moderate pot, moderate water.',
-      p: { OUTER_D: 130, H: 140, LEDGE_Z: 35, FOOT_D: 36, FOOT_HOLE_D: 5, FOOT_HOLES: 6, FOOT_GAP: 4 } },
-    { n: 'Cherry tomato', w: [150, 360], c: 'veg', note: 'The thirstiest here — best with a patio or dwarf cherry variety at this size, and expect to top up every day or two in summer heat.',
-      p: { OUTER_D: 200, H: 200, LEDGE_Z: 52, FOOT_D: 50, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
-    { n: 'Lettuce', w: [40, 80], c: 'veg', note: 'Shallow roots, thirsty leaves — wide pot, generous reservoir.',
-      p: { OUTER_D: 160, H: 130, LEDGE_Z: 45, FOOT_D: 44, FOOT_HOLE_D: 6, FOOT_HOLES: 8, FOOT_GAP: 2 } },
+    { n: 'Small', w: [12, 30], c: 'size', moisture: 'steady', note: 'A little pot — herbs starting out, small houseplants, tight spaces.',
+      p: { OUTER_D: 100, H: 110, LEDGE_Z: 25 } },
+    { n: 'Medium', w: [20, 50], c: 'size', moisture: 'steady', note: 'The all-rounder — a comfortable home for most herbs and mid-size plants.',
+      p: { OUTER_D: 130, H: 150, LEDGE_Z: 40 } },
+    { n: 'Large', w: [30, 75], c: 'size', moisture: 'steady', note: 'A statement pot — bigger plants, longer stretches between refills.',
+      p: { OUTER_D: 170, H: 180, LEDGE_Z: 45 } },
+    { n: 'Test pot', c: 'size', moisture: 'steady', note: 'A quick print to confirm your printer seals — you only need the outer pot. Fill it with water and check it holds overnight. Afterwards it makes a fine propagation cup, succulent planter, or desk catchall.',
+      p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0, WICK_SPACING: 20 } },
+    { n: 'Basil', w: [40, 80], c: 'herbs', moisture: 'thirsty', note: 'Drinks hard and often — wide foot, open perforations, water always in reach.',
+      p: { OUTER_D: 140, H: 175, LEDGE_Z: 43 } },
+    { n: 'Mint', w: [40, 80], c: 'herbs', moisture: 'thirsty', note: 'Practically aquatic — it will find the water, and then take over the pot.',
+      p: { OUTER_D: 135, H: 155, LEDGE_Z: 43 } },
+    { n: 'Parsley', w: [25, 50], c: 'herbs', moisture: 'steady', note: 'Grows a taproot — this one is tall so the root has somewhere to go.',
+      p: { OUTER_D: 140, H: 195, LEDGE_Z: 40 } },
+    { n: 'Cilantro', w: [20, 45], c: 'herbs', moisture: 'steady', note: 'A smaller taproot than parsley — tall-ish pot, steady moisture.',
+      p: { OUTER_D: 120, H: 170, LEDGE_Z: 40 } },
+    { n: 'Oregano', w: [10, 25], c: 'herbs', moisture: 'dry', note: 'Likes to dry out between drinks — the foot sits higher so it gets dry spells. Let the well run empty and wait a few days before refilling.',
+      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30 } },
+    { n: 'Thyme', w: [8, 20], c: 'herbs', moisture: 'dry', note: 'Mediterranean and modest — small pot, small foot, real dry spells. Let the well run empty and wait a few days before refilling.',
+      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25 } },
+    { n: 'Rosemary', w: [10, 25], c: 'herbs', moisture: 'dry', note: 'Deep roots, dry habits — tall pot, high foot, let the reservoir run empty. Let the well run empty and wait a few days before refilling.',
+      p: { OUTER_D: 140, H: 180, LEDGE_Z: 30 } },
+    { n: 'Chives', w: [15, 35], c: 'herbs', moisture: 'steady', note: 'Shallow and easygoing — compact pot, steady sips.',
+      p: { OUTER_D: 110, H: 120, LEDGE_Z: 35 } },
+    { n: 'Pothos', w: [15, 40], c: 'green', moisture: 'steady', note: 'Forgiving as they come — moderate everything, hard to get wrong.',
+      p: { OUTER_D: 140, H: 140, LEDGE_Z: 35 } },
+    { n: 'Peace lily', w: [30, 60], c: 'green', moisture: 'thirsty', note: 'Loves constant moisture — big reservoir, wide open foot.',
+      p: { OUTER_D: 160, H: 160, LEDGE_Z: 40 } },
+    { n: 'Fern', w: [30, 60], c: 'green', moisture: 'thirsty', note: 'A humidity creature — keep the water close and never let it fully dry.',
+      p: { OUTER_D: 150, H: 140, LEDGE_Z: 40 } },
+    { n: 'African violet', w: [8, 20], c: 'green', moisture: 'steady', note: 'The original self-watered houseplant — small pot, gentle steady moisture.',
+      p: { OUTER_D: 100, H: 90, LEDGE_Z: 25 } },
+    { n: 'Spider plant', w: [15, 35], c: 'green', moisture: 'steady', note: 'Tolerant and cheerful — moderate pot, moderate water.',
+      p: { OUTER_D: 130, H: 140, LEDGE_Z: 35 } },
+    { n: 'Cherry tomato', w: [150, 360], c: 'veg', moisture: 'thirsty', note: 'The thirstiest here — best with a patio or dwarf cherry variety at this size, and expect to top up every day or two in summer heat.',
+      p: { OUTER_D: 200, H: 200, LEDGE_Z: 52 } },
+    { n: 'Lettuce', w: [40, 80], c: 'veg', moisture: 'thirsty', note: 'Shallow roots, thirsty leaves — wide pot, generous reservoir.',
+      p: { OUTER_D: 160, H: 130, LEDGE_Z: 45 } },
   ];
+
+  // Foot geometry from moisture tier + pot diameter — one source of truth in
+  // place of per-preset literals. Calibrated one notch drier than the old
+  // hand-set values (peat over-wicks): thirsty ≈ old mint-class, steady ≈ old
+  // oregano-class scaled to size, dry smaller still with a high gap so the soil
+  // genuinely dries between drinks.
+  function footParams(moisture, D) {
+    const spec = {
+      thirsty: { ratio: 0.31, holeD: 6.0, gap: 2,  holes: D < 120 ? 6 : 8 },
+      steady:  { ratio: 0.23, holeD: 4.0, gap: 7,  holes: D < 120 ? 4 : 6 },
+      dry:     { ratio: 0.18, holeD: 3.5, gap: 10, holes: 3 },
+    }[moisture] || { ratio: 0.23, holeD: 4.0, gap: 7, holes: D < 120 ? 4 : 6 };
+    return {
+      FOOT_D: Math.round(D * spec.ratio),
+      FOOT_HOLES: spec.holes,
+      FOOT_HOLE_D: spec.holeD,
+      FOOT_GAP: spec.gap,
+    };
+  }
 
   // One "look" policy for every preset: fine flutes at a consistent ~6 mm
   // pitch (finer than the old ~8.5 mm) with a shallow 1.0 mm depth. Rib count
@@ -1167,12 +1210,9 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     pl.p.RIB_COUNT = Math.round(Math.PI * pl.p.OUTER_D / RIB_PITCH);
   }
 
-  // With the flared foot, drop the tip a couple mm deeper (min 2 mm clearance)
-  // so it reaches lower water — reclaiming the dead pool the old tip sat above.
-  // Leave the dry-spell presets (tall gap) alone: Mediterranean herbs want the
-  // foot to sit high so the soil actually dries out between drinks.
+  // Bake the tier-derived foot values into each preset (sliders still override).
   for (const pl of PLANTS) {
-    if (pl.p.FOOT_GAP !== undefined && pl.p.FOOT_GAP <= 4) pl.p.FOOT_GAP = Math.max(2, pl.p.FOOT_GAP - 2);
+    Object.assign(pl.p, footParams(pl.moisture, pl.p.OUTER_D));
   }
 
   /* ----- plant picker ----- */
@@ -1477,11 +1517,12 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
 
   function updateStats() {
     const d = PC.derived(params);
-    // the reservoir is a full-bore cylinder now; wick mode fills the whole bore,
+    // reservoir wall is the inner liner (resInner); wick mode fills that column,
     // soil-foot mode subtracts the funnel the foot displaces
+    const rr = d.LOWER_R - (params.SOLID_RESERVOIR ? 3.6 : 0);
     const resVol = params.MODE === 'foot'
       ? PC.footWater(params)
-      : Math.max(0, Math.PI * d.BORE_R * d.BORE_R * (params.LEDGE_Z - params.FLOOR) / 1000);
+      : Math.max(0, Math.PI * rr * rr * (params.LEDGE_Z - params.FLOOR) / 1000);
     const stat = (k, v) => '<div class="stat"><span class="k">' + k + '</span> <span class="v">' + v + '</span></div>';
     document.getElementById('stats').innerHTML =
       stat('outer', '<b>&Oslash;' + params.OUTER_D + ' &times; ' + params.H + '</b> mm') +
