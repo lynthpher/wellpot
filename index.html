@@ -802,7 +802,7 @@ function buildInnerFoot(p) {
   const r_o = d.r_o, rCav = r_o - p.INNER_WALL;
   const fiBot = Math.max(4, frBot - fw);
   const rimZ = FD + d.innerH;           // total height and seat position unchanged
-  const INF = p.INNER_FLOOR, M = 192;
+  const INF = p.INNER_FLOOR, M = 224;   // divisible by NS(14) so the slot band aligns to the ring grid
 
   // Plain circular foot (matches the uniform circular seat — the hull has no
   // opening to line a fill-port notch up with anymore). One 45deg cone from a
@@ -823,55 +823,65 @@ function buildInnerFoot(p) {
   facePolyHoles(m, circ(fiBot), perfs, INF, true);             // inside the tip
   for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, INF), false); // perf tubes
 
-  // drainage slot band — pill-shaped (rounded-end) vertical slits: no sharp
-  // stress-riser corners, and the rounded tops print without a flat bridge.
-  // Built by marching an angle x height grid: every solid cell gets wall faces,
-  // and every solid<->open boundary is capped so each opening stays watertight.
+  // drainage slots — smooth elliptical openings. Each slot's edges are true
+  // continuous curves (sampled finely in height, endpoints at the exact ellipse
+  // boundary — not snapped to a grid), so no stair-stepping. The wall between
+  // slots is stitched to those curved edges by a ribbon triangulation, and each
+  // slot edge is capped through the wall (outer<->inner) so it stays watertight.
+  const TWO = 2 * Math.PI;
   const z1 = Math.max(INF + 1.5, coneH * 0.18);
   const z2 = Math.min(coneH - 2.5, coneH * 0.85);
   const slotOK = z2 > z1 + 4;
-  const NS = 16, DTH = 0.06, K = 16;              // 16 slits, ~7deg wide, 16 height rows
-  const tb = 0.10, tt = 0.90, fR = 0.40;          // pill: solid end-margins + rounded fraction
-  const widthAt = t => {                          // 0..1 width along the pill (rounded ends)
-    if (!slotOK || t <= tb || t >= tt) return 0;
-    const u = (t - tb) / (tt - tb);
-    if (u < fR)     return Math.sqrt(Math.max(0, 1 - ((fR - u) / fR) ** 2));
-    if (u > 1 - fR) return Math.sqrt(Math.max(0, 1 - ((u - (1 - fR)) / fR) ** 2));
-    return 1;
+  const NS = 14, DTH = 0.085, K = 22;             // 14 slits, elliptical, 22 height rows
+  const hwAt = z => {                             // continuous angular half-width at height z (ellipse)
+    if (!slotOK) return 0;
+    const t = (z - z1) / (z2 - z1);
+    return (t <= 0 || t >= 1) ? 0 : DTH * Math.sqrt(Math.max(0, 1 - (2*t - 1) ** 2));
   };
-  const angGap = (a, b) => { let x = Math.abs(a - b); return x > Math.PI ? 2*Math.PI - x : x; };
-  const solid = (i, k) => {
-    const hw = DTH * widthAt((k + 0.5) / K);
-    if (hw <= 0) return true;
-    const a = 2*Math.PI*(i + 0.5)/M;
-    for (let s = 0; s < NS; s++) if (angGap(a, 2*Math.PI*(s + 0.5)/NS) <= hw) return false;
-    return true;
+  const phi = s => TWO * s / NS;                  // slot centers (on the ring grid since M % NS == 0)
+  const oPt = (a, z) => { const R = Ro(z); return [R*Math.cos(a), R*Math.sin(a), z]; };
+  const iPt = (a, z) => { const R = Ri(z); return [R*Math.cos(a), R*Math.sin(a), z]; };
+  // ring-grid angles strictly inside (a0,a1), bracketed by the exact endpoints
+  const gridArc = (a0, a1) => {
+    const pts = [a0];
+    for (let g = Math.ceil(a0 * M / TWO + 1e-6); g <= Math.floor(a1 * M / TWO - 1e-6); g++) pts.push(g * TWO / M);
+    pts.push(a1);
+    return pts;
   };
+  // triangulate a strip between two angle-lists (different lengths ok), by
+  // normalized position, on surface surf (oPt/iPt); flip reverses the normal.
+  const ribbon = (angA, za, angB, zb, surf, flip) => {
+    const nA = angA.length, nB = angB.length;
+    const spanA = (angA[nA-1] - angA[0]) || 1, spanB = (angB[nB-1] - angB[0]) || 1;
+    const AP = angA.map(a => surf(a, za)), BP = angB.map(a => surf(a, zb));
+    let i = 0, j = 0;
+    while (i < nA-1 || j < nB-1) {
+      const advA = (j >= nB-1) || (i < nA-1 && (angA[i+1]-angA[0])/spanA <= (angB[j+1]-angB[0])/spanB);
+      if (advA) { flip ? addTri(m, AP[i], BP[j], AP[i+1]) : addTri(m, AP[i], AP[i+1], BP[j]); i++; }
+      else      { flip ? addTri(m, AP[i], BP[j], BP[j+1]) : addTri(m, AP[i], BP[j+1], BP[j]); j++; }
+    }
+  };
+
+  // solid cone below and above the band (full rings, matching the grid at z1/z2)
+  stripRings(m, lift(circ(frBot), 0), lift(circ(Ro(z1)), z1), false);
+  stripRings(m, lift(circ(Ro(z2)), z2), lift(circ(r_o), coneH), false);
+  stripRings(m, lift(circ(fiBot), INF), lift(circ(Ri(z1)), z1), true);
+  stripRings(m, lift(circ(Ri(z2)), z2), lift(circ(rCav), coneH), true);
+
   const zAt = k => z1 + (z2 - z1) * k / K;
-  const OR = [], IR = [];
-  for (let k = 0; k <= K; k++) { const z = zAt(k); OR.push(lift(circ(Ro(z)), z)); IR.push(lift(circ(Ri(z)), z)); }
-
-  // solid cone below and above the band (full rings)
-  stripRings(m, lift(circ(frBot), 0), OR[0], false);
-  stripRings(m, OR[K], lift(circ(r_o), coneH), false);
-  stripRings(m, lift(circ(fiBot), INF), IR[0], true);
-  stripRings(m, IR[K], lift(circ(rCav), coneH), true);
-
   for (let k = 0; k < K; k++) {
-    for (let i = 0; i < M; i++) {
-      const j = (i + 1) % M;
-      if (solid(i, k)) {
-        addQuad(m, OR[k][i], OR[k][j], OR[k+1][j], OR[k+1][i]);   // outer wall
-        addQuad(m, IR[k][i], IR[k+1][i], IR[k+1][j], IR[k][j]);   // inner wall
-      }
-      if (solid((i-1+M)%M, k) !== solid(i, k)) {                  // vertical cap at column edge i
-        if (solid((i-1+M)%M, k)) addQuad(m, OR[k][i], IR[k][i], IR[k+1][i], OR[k+1][i]);
-        else                     addQuad(m, OR[k][i], OR[k+1][i], IR[k+1][i], IR[k][i]);
-      }
-      if (k > 0 && solid(i, k-1) !== solid(i, k)) {               // horizontal cap at z-level k
-        if (solid(i, k-1)) addQuad(m, OR[k][i], OR[k][j], IR[k][j], IR[k][i]);
-        else               addQuad(m, OR[k][i], IR[k][i], IR[k][j], OR[k][j]);
-      }
+    const za = zAt(k), zb = zAt(k+1), ha = hwAt(za), hb = hwAt(zb);
+    for (let r = 0; r < NS; r++) {                // ribs between consecutive slots
+      const A = gridArc(phi(r) + ha, phi(r+1) - ha);
+      const B = gridArc(phi(r) + hb, phi(r+1) - hb);
+      ribbon(A, za, B, zb, oPt, false);           // outer wall of the rib
+      ribbon(A, za, B, zb, iPt, true);            // inner wall of the rib
+    }
+    if (ha <= 0 && hb <= 0) continue;
+    for (let s = 0; s < NS; s++) {                // cap each slot edge through the wall
+      const c = phi(s);
+      addQuad(m, oPt(c-ha, za), iPt(c-ha, za), iPt(c-hb, zb), oPt(c-hb, zb)); // left edge
+      addQuad(m, oPt(c+ha, za), oPt(c+hb, zb), iPt(c+hb, zb), iPt(c+ha, za)); // right edge
     }
   }
 
