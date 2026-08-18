@@ -828,7 +828,7 @@ function buildInnerFoot(p) {
   const z1 = Math.max(INF + 1.5, coneH * 0.18);
   const z2 = Math.min(coneH - 2.0, coneH * 0.85);
   const slotOK = z2 > z1 + 1.5;
-  const NS = 8, per = M / NS, ribCols = Math.round(per * 0.5);
+  const NS = 16, per = M / NS, ribCols = per - 2;   // 16 narrow slots (~2 of every 8 cols)
   const isSlot = i => slotOK && ((((i % per) + per) % per) >= ribCols);
   const OA = lift(circ(Ro(z1)), z1), OB = lift(circ(Ro(z2)), z2);
   const IA = lift(circ(Ri(z1)), z1), IB = lift(circ(Ri(z2)), z2);
