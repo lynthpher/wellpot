@@ -149,13 +149,13 @@
     margin-bottom: 11px;
   }
   .card.water-card > h2 { color: var(--water-deep); }
+  .pick-label { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: #9a9d90; margin: 2px 0 6px; }
   .seg-row { display: flex; background: #EDEFE6; border-radius: 12px; padding: 3px; margin-bottom: 11px; }
   .seg-row .seg {
     flex: 1; text-align: center; font-size: 12px; padding: 7px 4px;
     border-radius: 10px; color: var(--ink-soft); cursor: pointer; user-select: none;
   }
   .seg-row .seg.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(46,51,43,.07); }
-  #plantChips { display: flex; flex-wrap: wrap; gap: 7px; }
   .chip {
     font-size: 12.5px; padding: 7px 13px; border-radius: 999px;
     border: 1px solid var(--card-line); background: var(--card); color: var(--ink-soft);
@@ -1151,50 +1151,24 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     return c;
   }
 
-  // Per-plant moisture tier drives the foot geometry (see footParams). Field
-  // data: real pots run wetter than intended because peat potting mix wicks far
-  // harder than the mineral substrates these systems assume — so the whole scale
-  // is calibrated one notch drier than hand-set values used to be.
-  const PLANTS = [
-    { n: 'Small', w: [12, 30], c: 'size', moisture: 'steady', note: 'A little pot — herbs starting out, small houseplants, tight spaces.',
-      p: { OUTER_D: 100, H: 110, LEDGE_Z: 25 } },
-    { n: 'Medium', w: [20, 50], c: 'size', moisture: 'steady', note: 'The all-rounder — a comfortable home for most herbs and mid-size plants.',
-      p: { OUTER_D: 130, H: 150, LEDGE_Z: 40 } },
-    { n: 'Large', w: [30, 75], c: 'size', moisture: 'steady', note: 'A statement pot — bigger plants, longer stretches between refills.',
-      p: { OUTER_D: 170, H: 180, LEDGE_Z: 45 } },
-    { n: 'Test pot', c: 'size', moisture: 'steady', note: 'A quick print to confirm your printer seals — you only need the outer pot. Fill it with water and check it holds overnight. Afterwards it makes a fine propagation cup, succulent planter, or desk catchall.',
-      p: { OUTER_D: 70, H: 32, LEDGE_Z: 20, RIB_DEPTH: 0, BASE_BAND_H: 0, TOP_BAND_H: 0, WICK_SPACING: 20 } },
-    { n: 'Basil', w: [40, 80], c: 'herbs', moisture: 'thirsty', note: 'Drinks hard and often — wide foot, open perforations, water always in reach.',
-      p: { OUTER_D: 140, H: 175, LEDGE_Z: 43 } },
-    { n: 'Mint', w: [40, 80], c: 'herbs', moisture: 'thirsty', note: 'Practically aquatic — it will find the water, and then take over the pot.',
-      p: { OUTER_D: 135, H: 155, LEDGE_Z: 43 } },
-    { n: 'Parsley', w: [25, 50], c: 'herbs', moisture: 'steady', note: 'Grows a taproot — this one is tall so the root has somewhere to go.',
-      p: { OUTER_D: 140, H: 195, LEDGE_Z: 40 } },
-    { n: 'Cilantro', w: [20, 45], c: 'herbs', moisture: 'steady', note: 'A smaller taproot than parsley — tall-ish pot, steady moisture.',
-      p: { OUTER_D: 120, H: 170, LEDGE_Z: 40 } },
-    { n: 'Oregano', w: [10, 25], c: 'herbs', moisture: 'dry', note: 'Likes to dry out between drinks — the foot sits higher so it gets dry spells. Let the well run empty and wait a few days before refilling.',
-      p: { OUTER_D: 120, H: 150, LEDGE_Z: 30 } },
-    { n: 'Thyme', w: [8, 20], c: 'herbs', moisture: 'dry', note: 'Mediterranean and modest — small pot, small foot, real dry spells. Let the well run empty and wait a few days before refilling.',
-      p: { OUTER_D: 100, H: 120, LEDGE_Z: 25 } },
-    { n: 'Rosemary', w: [10, 25], c: 'herbs', moisture: 'dry', note: 'Deep roots, dry habits — tall pot, high foot, let the reservoir run empty. Let the well run empty and wait a few days before refilling.',
-      p: { OUTER_D: 140, H: 180, LEDGE_Z: 30 } },
-    { n: 'Chives', w: [15, 35], c: 'herbs', moisture: 'steady', note: 'Shallow and easygoing — compact pot, steady sips.',
-      p: { OUTER_D: 110, H: 120, LEDGE_Z: 35 } },
-    { n: 'Pothos', w: [15, 40], c: 'green', moisture: 'steady', note: 'Forgiving as they come — moderate everything, hard to get wrong.',
-      p: { OUTER_D: 140, H: 140, LEDGE_Z: 35 } },
-    { n: 'Peace lily', w: [30, 60], c: 'green', moisture: 'thirsty', note: 'Loves constant moisture — big reservoir, wide open foot.',
-      p: { OUTER_D: 160, H: 160, LEDGE_Z: 40 } },
-    { n: 'Fern', w: [30, 60], c: 'green', moisture: 'thirsty', note: 'A humidity creature — keep the water close and never let it fully dry.',
-      p: { OUTER_D: 150, H: 140, LEDGE_Z: 40 } },
-    { n: 'African violet', w: [8, 20], c: 'green', moisture: 'steady', note: 'The original self-watered houseplant — small pot, gentle steady moisture.',
-      p: { OUTER_D: 100, H: 90, LEDGE_Z: 25 } },
-    { n: 'Spider plant', w: [15, 35], c: 'green', moisture: 'steady', note: 'Tolerant and cheerful — moderate pot, moderate water.',
-      p: { OUTER_D: 130, H: 140, LEDGE_Z: 35 } },
-    { n: 'Cherry tomato', w: [150, 360], c: 'veg', moisture: 'thirsty', note: 'The thirstiest here — best with a patio or dwarf cherry variety at this size, and expect to top up every day or two in summer heat.',
-      p: { OUTER_D: 200, H: 200, LEDGE_Z: 52 } },
-    { n: 'Lettuce', w: [40, 80], c: 'veg', moisture: 'thirsty', note: 'Shallow roots, thirsty leaves — wide pot, generous reservoir.',
-      p: { OUTER_D: 160, H: 130, LEDGE_Z: 45 } },
+  // Two axes instead of a long plant list: pick a pot SIZE and a WATERING style.
+  // Size sets the pot dimensions; watering sets the foot (via footParams). Every
+  // combination suits a range of plants — examples live in the watering notes.
+  const SIZES = [
+    { n: 'Small',  OUTER_D: 100, H: 110, LEDGE_Z: 25 },
+    { n: 'Medium', OUTER_D: 130, H: 150, LEDGE_Z: 40 },
+    { n: 'Large',  OUTER_D: 170, H: 185, LEDGE_Z: 47 },
   ];
+  const WATERINGS = [
+    { n: 'Dry',     m: 'dry',     base: 0.6,
+      note: 'Lets the soil dry out between drinks — rosemary, thyme, oregano, sage, lavender, succulents. Small high-set foot; let the well run empty and wait a few days before refilling.' },
+    { n: 'Steady',  m: 'steady',  base: 1.0,
+      note: 'Even, everyday moisture — most herbs (parsley, cilantro, chives), pothos, spider plant, general foliage. The all-rounder.' },
+    { n: 'Thirsty', m: 'thirsty', base: 1.6,
+      note: 'Keeps water always in reach — basil, mint, lettuce, ferns, peace lily, leafy veg. Wide foot, open perforations.' },
+  ];
+  // typical daily draw (ml) for the refill estimate, from pot size × watering
+  const drawFor = (s, w) => { const d = (s.OUTER_D / 130) ** 2 * 30 * w.base; return [d * 0.65, d * 1.45]; };
 
   // Foot geometry from moisture tier + pot diameter — one source of truth in
   // place of per-preset literals. Calibrated one notch drier than the old
@@ -1215,80 +1189,54 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
     };
   }
 
-  // One "look" policy for every preset: fine flutes at a consistent ~6 mm
-  // pitch (finer than the old ~8.5 mm) with a shallow 1.0 mm depth. Rib count
-  // is just outer-wall modulation, so it barely touches print time, while the
-  // shallower depth keeps each rib within a couple of wall lines — clean, fast
-  // walls and a little less filament. Smooth pots opt out with RIB_DEPTH 0.
-  const RIB_PITCH = 6, LOOK_DEPTH = 1.0;
-  for (const pl of PLANTS) {
-    if (pl.p.RIB_DEPTH === 0) continue;            // leave smooth presets alone
-    pl.p.RIB_DEPTH = LOOK_DEPTH;
-    pl.p.RIB_COUNT = Math.round(Math.PI * pl.p.OUTER_D / RIB_PITCH);
-  }
+  // Fine flutes at a consistent ~6 mm pitch: rib count tracks diameter.
+  const ribCountFor = D => Math.round(Math.PI * D / 6);
 
-  // Bake the tier-derived foot values into each preset (sliders still override).
-  for (const pl of PLANTS) {
-    Object.assign(pl.p, footParams(pl.moisture, pl.p.OUTER_D));
-  }
-
-  /* ----- plant picker ----- */
+  /* ----- pot picker: size × watering ----- */
   const plantCard = card('what will live in it?');
   plantCard.innerHTML +=
-    '<div class="seg-row" id="plantCats">' +
-    '<div class="seg on" data-cat="size">sizes</div>' +
-    '<div class="seg" data-cat="herbs">herbs</div>' +
-    '<div class="seg" data-cat="green">indoor</div>' +
-    '<div class="seg" data-cat="veg">veg</div></div>' +
-    '<div id="plantChips"></div>' +
+    '<div class="pick-label">pot size</div>' +
+    '<div class="seg-row" id="sizeSeg">' +
+      SIZES.map((s, i) => '<div class="seg' + (i === 1 ? ' on' : '') + '" data-i="' + i + '">' + s.n + '</div>').join('') +
+    '</div>' +
+    '<div class="pick-label">watering</div>' +
+    '<div class="seg-row" id="waterSeg">' +
+      WATERINGS.map((w, i) => '<div class="seg' + (i === 1 ? ' on' : '') + '" data-i="' + i + '">' + w.n + '</div>').join('') +
+    '</div>' +
     '<div id="plantNote"></div>';
-  const plantChips = plantCard.querySelector('#plantChips');
+  const sizeSeg = plantCard.querySelector('#sizeSeg');
+  const waterSeg = plantCard.querySelector('#waterSeg');
   const plantNote = plantCard.querySelector('#plantNote');
-  const plantCats = plantCard.querySelector('#plantCats');
-  let currentCat = 'size';
-  function renderPlantChips(selectedName) {
-    plantChips.innerHTML = '';
-    for (const pl of PLANTS.filter(x => x.c === currentCat)) {
-      const chip = document.createElement('div');
-      chip.className = 'chip' + (pl.n === selectedName ? ' on' : '');
-      chip.textContent = pl.n;
-      chip.addEventListener('click', () => applyPlant(pl));
-      plantChips.appendChild(chip);
-    }
-  }
-  plantCats.addEventListener('click', e => {
-    const el = e.target.closest('.seg');
-    if (!el) return;
-    currentCat = el.dataset.cat;
-    plantCats.querySelectorAll('.seg').forEach(x => x.classList.toggle('on', x === el));
-    renderPlantChips(currentPlant);
-    syncPlantNote();
-  });
-  let currentPlant = null, currentDraw = null;
-  const CUSTOM_NOTE = 'Custom size — pick a plant any time to start over from a good fit.';
-  // keep the note tied to what's highlighted: show the selected plant's note
-  // only while that plant lives in the category currently on screen
-  function syncPlantNote() {
-    const shown = currentPlant && PLANTS.find(x => x.c === currentCat && x.n === currentPlant);
-    plantNote.textContent = shown ? shown.note
-      : currentPlant ? 'Pick a plant to start from a good fit.'
-      : CUSTOM_NOTE;
-  }
-  function markPreset(name) {
-    currentPlant = name;
-    if (!name) currentDraw = null;
-    renderPlantChips(name);
-    syncPlantNote();
-  }
-  function applyPlant(pl) {
-    Object.assign(params, pl.p);
-    currentPlant = pl.n;
-    currentDraw = pl.w;
-    plantNote.textContent = pl.note;
-    renderPlantChips(pl.n);
+  let sizeIdx = 1, waterIdx = 1, currentDraw = null;
+  const CUSTOM_NOTE = 'Custom — pick a size and watering style any time to start from a good fit.';
+
+  function applyPreset() {
+    const s = SIZES[sizeIdx], w = WATERINGS[waterIdx];
+    Object.assign(params, { OUTER_D: s.OUTER_D, H: s.H, LEDGE_Z: s.LEDGE_Z, RIB_COUNT: ribCountFor(s.OUTER_D) },
+      footParams(w.m, s.OUTER_D));
+    if (params.RIB_DEPTH === 0) params.RIB_DEPTH = 1.0;   // keep it ribbed unless Smooth is chosen
+    currentDraw = drawFor(s, w);
+    plantNote.textContent = w.note;
+    sizeSeg.querySelectorAll('.seg').forEach((el, i) => el.classList.toggle('on', i === sizeIdx));
+    waterSeg.querySelectorAll('.seg').forEach((el, i) => el.classList.toggle('on', i === waterIdx));
     syncAll();
     scheduleBuild();
   }
+  // called by sliders when a value is hand-edited: drop back to "custom"
+  function markPreset() {
+    sizeIdx = -1; waterIdx = -1; currentDraw = null;
+    sizeSeg.querySelectorAll('.seg').forEach(el => el.classList.remove('on'));
+    waterSeg.querySelectorAll('.seg').forEach(el => el.classList.remove('on'));
+    plantNote.textContent = CUSTOM_NOTE;
+  }
+  sizeSeg.addEventListener('click', e => {
+    const el = e.target.closest('.seg'); if (!el) return;
+    sizeIdx = +el.dataset.i; if (waterIdx < 0) waterIdx = 1; applyPreset();
+  });
+  waterSeg.addEventListener('click', e => {
+    const el = e.target.closest('.seg'); if (!el) return;
+    waterIdx = +el.dataset.i; if (sizeIdx < 0) sizeIdx = 1; applyPreset();
+  });
 
   /* ----- watering mode ----- */
   const modeCard = card(null);
@@ -1674,7 +1622,7 @@ if (typeof window !== 'undefined') window.PotCore = PotCore;
   aboutModal.addEventListener('click', e => { if (e.target === aboutModal) aboutModal.classList.remove('open'); });
   window.addEventListener('keydown', e => { if (e.key === 'Escape') aboutModal.classList.remove('open'); });
 
-  applyPlant(PLANTS.find(x => x.n === 'Medium'));
+  applyPreset();   // start on Medium × Steady
   resize();
   build();
   tick();
