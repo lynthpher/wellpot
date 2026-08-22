@@ -891,7 +891,7 @@ function buildInnerFoot(p) {
     const bb = rowZ[r] - rHole, bt = rowZ[r] + rHole;
     stripRings(m, lift(circ(Ro(zo)), zo), lift(circ(Ro(bb)), bb), false);
     stripRings(m, lift(circ(Ri(zi)), zi), lift(circ(Ri(bb)), bb), true);
-    holeBand(rowZ[r], r % 2 ? TWO * 8 / M : 0);   // stagger odd rows by a half-pitch (grid-aligned)
+    holeBand(rowZ[r], 0);   // all rows share phase 0 -> holes line up in vertical columns
     zo = bt; zi = bt;
   }
   stripRings(m, lift(circ(Ro(zo)), zo), lift(circ(r_o), coneH), false);
