@@ -856,7 +856,7 @@ function buildInnerFoot(p) {
   const NH = 14;                                  // NH divides M(224) so rims sit on the ring grid
   const zLo = Math.max(INF + 3, coneH * 0.15), zHi = coneH * 0.85, avail = zHi - zLo;
   const holeOK = avail > 6 && coneH > INF + 8;
-  const rHole = holeOK ? Math.min(2.2, Ro(zLo) * Math.PI / NH * 0.7) : 0;
+  const rHole = holeOK ? Math.min(1.5, Ro(zLo) * Math.PI / NH * 0.7) : 0;
   const NROWS = holeOK ? Math.min(4, Math.max(1, Math.floor(avail / (2*rHole + 2)) + 1)) : 0;
   const rowZ = [];
   if (NROWS === 1) rowZ.push((zLo + zHi) / 2);
