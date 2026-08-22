@@ -823,22 +823,11 @@ function buildInnerFoot(p) {
   facePolyHoles(m, circ(fiBot), perfs, INF, true);             // inside the tip
   for (const pf of perfs) stripRings(m, lift(pf, 0), lift(pf, INF), false); // perf tubes
 
-  // drainage slots — smooth elliptical openings. Each slot's edges are true
-  // continuous curves (sampled finely in height, endpoints at the exact ellipse
-  // boundary — not snapped to a grid), so no stair-stepping. The wall between
-  // slots is stitched to those curved edges by a ribbon triangulation, and each
-  // slot edge is capped through the wall (outer<->inner) so it stays watertight.
+  // drainage: rows of round holes through the cone wall, so the soil drains and
+  // breathes at every level. Each hole's rim is a true continuous circle (not a
+  // stepped grid): the wall between holes is stitched to the rims by a ribbon
+  // triangulation and each rim is capped through the wall so it stays watertight.
   const TWO = 2 * Math.PI;
-  const z1 = Math.max(INF + 1.5, coneH * 0.18);
-  const z2 = Math.min(coneH - 2.5, coneH * 0.85);
-  const slotOK = z2 > z1 + 4;
-  const NS = 14, DTH = 0.085, K = 22;             // 14 slits, elliptical, 22 height rows
-  const hwAt = z => {                             // continuous angular half-width at height z (ellipse)
-    if (!slotOK) return 0;
-    const t = (z - z1) / (z2 - z1);
-    return (t <= 0 || t >= 1) ? 0 : DTH * Math.sqrt(Math.max(0, 1 - (2*t - 1) ** 2));
-  };
-  const phi = s => TWO * s / NS;                  // slot centers (on the ring grid since M % NS == 0)
   const oPt = (a, z) => { const R = Ro(z); return [R*Math.cos(a), R*Math.sin(a), z]; };
   const iPt = (a, z) => { const R = Ri(z); return [R*Math.cos(a), R*Math.sin(a), z]; };
   // ring-grid angles strictly inside (a0,a1), bracketed by the exact endpoints
@@ -862,28 +851,51 @@ function buildInnerFoot(p) {
     }
   };
 
-  // solid cone below and above the band (full rings, matching the grid at z1/z2)
-  stripRings(m, lift(circ(frBot), 0), lift(circ(Ro(z1)), z1), false);
-  stripRings(m, lift(circ(Ro(z2)), z2), lift(circ(r_o), coneH), false);
-  stripRings(m, lift(circ(fiBot), INF), lift(circ(Ri(z1)), z1), true);
-  stripRings(m, lift(circ(Ri(z2)), z2), lift(circ(rCav), coneH), true);
+  // hole layout: NH holes per row, a few rows up the cone. rHole is capped so
+  // holes never overlap at the tightest (lowest) row; row count adapts to height.
+  const NH = 14;                                  // NH divides M(224) so rims sit on the ring grid
+  const zLo = Math.max(INF + 3, coneH * 0.15), zHi = coneH * 0.85, avail = zHi - zLo;
+  const holeOK = avail > 6 && coneH > INF + 8;
+  const rHole = holeOK ? Math.min(2.2, Ro(zLo) * Math.PI / NH * 0.7) : 0;
+  const NROWS = holeOK ? Math.min(4, Math.max(1, Math.floor(avail / (2*rHole + 2)) + 1)) : 0;
+  const rowZ = [];
+  if (NROWS === 1) rowZ.push((zLo + zHi) / 2);
+  else for (let r = 0; r < NROWS; r++) rowZ.push(zLo + rHole + (avail - 2*rHole) * r / (NROWS - 1));
 
-  const zAt = k => z1 + (z2 - z1) * k / K;
-  for (let k = 0; k < K; k++) {
-    const za = zAt(k), zb = zAt(k+1), ha = hwAt(za), hb = hwAt(zb);
-    for (let r = 0; r < NS; r++) {                // ribs between consecutive slots
-      const A = gridArc(phi(r) + ha, phi(r+1) - ha);
-      const B = gridArc(phi(r) + hb, phi(r+1) - hb);
-      ribbon(A, za, B, zb, oPt, false);           // outer wall of the rib
-      ribbon(A, za, B, zb, iPt, true);            // inner wall of the rib
+  // one row of NH round holes centered at height zc (phase offset staggers rows)
+  const holeBand = (zc, phase) => {
+    const Rc = Ro(zc), KB = 12;
+    // clamp to exactly 0 near the band edges so the rib endpoints land on the
+    // ring grid (a tiny positive half-width there would miss the solid strip)
+    const hwAt = z => { const s = rHole*rHole - (z-zc)*(z-zc); return s > 1e-6 ? Math.sqrt(s) / Rc : 0; };
+    const phi = h => phase + TWO * h / NH;
+    const zAt = k => (zc - rHole) + 2*rHole * k / KB;
+    for (let k = 0; k < KB; k++) {
+      const za = zAt(k), zb = zAt(k+1), ha = hwAt(za), hb = hwAt(zb);
+      for (let h = 0; h < NH; h++) {              // wall (ribs) between consecutive holes
+        ribbon(gridArc(phi(h) + ha, phi(h+1) - ha), za, gridArc(phi(h) + hb, phi(h+1) - hb), zb, oPt, false);
+        ribbon(gridArc(phi(h) + ha, phi(h+1) - ha), za, gridArc(phi(h) + hb, phi(h+1) - hb), zb, iPt, true);
+      }
+      if (ha <= 0 && hb <= 0) continue;
+      for (let h = 0; h < NH; h++) {              // cap each hole rim through the wall
+        const c = phi(h);
+        addQuad(m, oPt(c-ha, za), iPt(c-ha, za), iPt(c-hb, zb), oPt(c-hb, zb));
+        addQuad(m, oPt(c+ha, za), oPt(c+hb, zb), iPt(c+hb, zb), iPt(c+ha, za));
+      }
     }
-    if (ha <= 0 && hb <= 0) continue;
-    for (let s = 0; s < NS; s++) {                // cap each slot edge through the wall
-      const c = phi(s);
-      addQuad(m, oPt(c-ha, za), iPt(c-ha, za), iPt(c-hb, zb), oPt(c-hb, zb)); // left edge
-      addQuad(m, oPt(c+ha, za), oPt(c+hb, zb), iPt(c+hb, zb), iPt(c+ha, za)); // right edge
-    }
+  };
+
+  // solid cone strips between the hole bands (outer from the tip, inner from INF)
+  let zo = 0, zi = INF;
+  for (let r = 0; r < NROWS; r++) {
+    const bb = rowZ[r] - rHole, bt = rowZ[r] + rHole;
+    stripRings(m, lift(circ(Ro(zo)), zo), lift(circ(Ro(bb)), bb), false);
+    stripRings(m, lift(circ(Ri(zi)), zi), lift(circ(Ri(bb)), bb), true);
+    holeBand(rowZ[r], r % 2 ? TWO * 8 / M : 0);   // stagger odd rows by a half-pitch (grid-aligned)
+    zo = bt; zi = bt;
   }
+  stripRings(m, lift(circ(Ro(zo)), zo), lift(circ(r_o), coneH), false);
+  stripRings(m, lift(circ(Ri(zi)), zi), lift(circ(rCav), coneH), true);
 
   // inner body to the rim + rounded circular pour lip
   stripRings(m, lift(circ(rCav), coneH), lift(circ(rCav), rimZ), true);
